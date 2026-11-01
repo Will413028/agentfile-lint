@@ -1,0 +1,6 @@
+rules:
+  # `uses: ./` runs this repository's own action at the checked-out commit, which is the point of
+  # the self-check job. The `$/` self-repository syntax is newer than the pinned actionlint; revisit
+  # when both tools and the runner document it.
+  self-repository:
+    disable: true
