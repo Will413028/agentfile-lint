@@ -3,6 +3,14 @@
 All notable changes are listed here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- `rubric.md`: J1 also asks whether a line is needed before acting and drops enumerations that `ls` or a
+  search already shows; J3 sends rules with no exceptions to their guard and style rules to the
+  formatter or linter.
+
 ## [0.3.0] - 2026-10-31
 
 While the version is below 1.0, a minor release may carry breaking changes; this one does (see

@@ -20,7 +20,9 @@ list of findings, or "no findings") into the pull request; see `docs/pr-template
 
 **J1. Earns its place.** Remove the line mentally: would an agent working in this directory do
 something different or worse? Delete lines that restate what the code, the tooling or the agent's
-defaults already make obvious.
+defaults already make obvious. Keep only what cannot be seen from the code and must be known before
+acting. Enumerations that `ls` or a search already shows (file lists, lists of subdirectories or
+modules) do not earn their place.
 
 **J2. Right place.** A rule that applies to one subdirectory belongs in that directory's file; a rule
 that applies everywhere belongs in the root file, once. The linter catches identical lines only;
@@ -28,7 +30,9 @@ look for paraphrases of the same rule at two levels.
 
 **J3. Checkable.** A rule has a way to fail: a test, a CI step, a command whose output is the
 evidence, or a named owner. A rule that nothing can contradict is a wish. Prefer pointing at the guard
-by name over describing the behaviour again.
+by name over describing the behaviour again. A rule with no exceptions belongs in the guard itself (a
+hook, a CI step, a test), with the file pointing to it; the file keeps the rules that need judgment.
+Style and formatting rules belong in the formatter or linter configuration, not in prose.
 
 **J4. Source of truth, not a copy.** A fact that lives in code, a schema or a spec is referenced, not
 repeated. Copied values (limits, durations, lists of names) drift silently. The linter lists
