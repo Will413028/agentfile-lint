@@ -11,8 +11,8 @@ list of findings, or "no findings") into the pull request; see `docs/pr-template
 
 ## How to review
 
-1. Read the diff, then the whole changed file; most problems are in how a new line sits next to old ones.
-2. Run `instruction-lint` first. Do not re-report what it already prints.
+1. Run `instruction-lint` first. Do not re-report what it already prints.
+2. Read the diff, then the whole changed file; most problems are in how a new line sits next to old ones.
 3. For each criterion below, say "ok" or quote the line and say what is wrong. Prefer one concrete
    fix per finding. Stop at the findings that change what an agent would do.
 
@@ -25,8 +25,12 @@ acting. Enumerations that `ls` or a search already shows (file lists, lists of s
 modules) do not earn their place.
 
 **J2. Right place.** A rule that applies to one subdirectory belongs in that directory's file; a rule
-that applies everywhere belongs in the root file, once. The linter catches identical lines only;
-look for paraphrases of the same rule at two levels.
+that applies everywhere belongs in the root file, once. Agents load subdirectory files differently:
+some read a subdirectory's file when they touch files there, others read only the files from the
+root down to the directory they started in, so a rule an agent must not miss when started at the
+root stays in the root file. The linter catches only identical lines of at least `min_chars`
+(R5, 40 by default), ignoring whitespace and list markers; look for paraphrases and short copies of
+the same rule at two levels.
 
 **J3. Checkable.** A rule has a way to fail: a test, a CI step, or a command whose output is the
 evidence. A rule that needs judgment fails in review instead: name who reviews it, or the criterion

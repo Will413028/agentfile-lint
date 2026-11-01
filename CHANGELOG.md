@@ -13,6 +13,8 @@ versions follow [Semantic Versioning](https://semver.org/).
 - `rubric.md`: the judgment checks R7-R9 are renamed J5-J7 so they cannot be mistaken for linter rule
   IDs; J3 states how a judgment rule can fail. The pull request snippet follows (J1-J7).
 - `rubric.md`: J4 says `R6` finds numeric candidates only, so copied lists of names need a reviewer.
+- `rubric.md`: the linter runs before the read-through; J2 notes that agents differ in when they load
+  a subdirectory's file and that R5 skips lines shorter than `min_chars`.
 
 ## [0.3.0] - 2026-10-31
 
