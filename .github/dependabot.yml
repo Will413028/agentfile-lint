@@ -1,0 +1,12 @@
+version: 2
+updates:
+  # The runner has no third-party dependencies; only workflow actions need updates.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14
+    groups:
+      actions:
+        patterns: ["*"]
