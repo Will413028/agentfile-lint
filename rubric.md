@@ -28,15 +28,17 @@ modules) do not earn their place.
 that applies everywhere belongs in the root file, once. The linter catches identical lines only;
 look for paraphrases of the same rule at two levels.
 
-**J3. Checkable.** A rule has a way to fail: a test, a CI step, a command whose output is the
-evidence, or a named owner. A rule that nothing can contradict is a wish; for a rule that needs judgment, the way to fail is a named reviewer or a criterion in this rubric. Prefer pointing at the guard
-by name over describing the behaviour again. A rule with no exceptions belongs in the guard itself (a
-hook, a CI step, a test), with the file pointing to it; the file keeps the rules that need judgment.
-Style and formatting rules belong in the formatter or linter configuration, not in prose.
+**J3. Checkable.** A rule has a way to fail: a test, a CI step, or a command whose output is the
+evidence. A rule that needs judgment fails in review instead: name who reviews it, or the criterion
+in this rubric that catches it. A rule that nothing can contradict is a wish. Prefer pointing at the
+guard by name over describing the behaviour again. A rule with no exceptions belongs in the guard
+itself (a hook, a CI step, a test), with the file pointing to it; the file keeps the rules that need
+judgment. Style and formatting rules belong in the formatter or linter configuration, not in prose.
 
 **J4. Source of truth, not a copy.** A fact that lives in code, a schema or a spec is referenced, not
 repeated. Copied values (limits, durations, lists of names) drift silently. The linter lists
-candidates (`R6`); decide whether each one should become a pointer.
+numeric candidates (`R6`: numbers with a unit, assignments, constant names); copied lists of
+names are yours to find. Decide whether each one should become a pointer.
 
 ## Judgment checks
 
