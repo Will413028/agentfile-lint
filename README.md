@@ -4,7 +4,7 @@ A linter for agent instruction files (`AGENTS.md`, `CLAUDE.md`). Rules and limit
 TOML file; the runner is a thin Python program that uses only the standard library
 (Python 3.11 or newer). A local git hook and CI call the same program with the same config.
 
-Status: version 0.3.0. Every rule except `R1` ships at `warn`; raise a rule to `error` in your own config once it is clean.
+Status: version 0.3.1. Every rule except `R1` ships at `warn`; raise a rule to `error` in your own config once it is clean.
 
 | Rule | Level (default) | What it checks |
 |---|---|---|
