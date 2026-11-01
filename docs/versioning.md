@@ -33,6 +33,9 @@ the release that ships it (`Added`, `Changed`, `Fixed`, `Removed`).
    `pyproject.toml` and `agentfile_lint/__init__.py`.
 2. `make check` on the supported Python versions; CI green.
 3. Tag `vx.y.z` (annotated, signed) on that commit and note the full commit SHA for consumers.
+4. Publish a GitHub release for the tag (notes from the changelog section). `publish.yml` then
+   builds the sdist and wheel from the tag and uploads them to PyPI with Trusted Publishing (no stored
+   token). PyPI holds the name and offers an install path; consumers still pin the full commit SHA.
 
 ## Upgrading a consumer
 
