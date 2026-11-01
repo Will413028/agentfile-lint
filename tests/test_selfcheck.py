@@ -12,7 +12,7 @@ class SelfCheckTest(unittest.TestCase):
         # Non-vacuous even before the file is committed: analyze a tracked copy of it.
         text = (helpers.REPO / "AGENTS.md").read_text(encoding="utf-8")
         # R3b needs the other tracked files to resolve paths; this copy has none, so it is switched off.
-        root = helpers.make_repo({"AGENTS.md": text, ".instruction-lint.toml": "[rules.R3b]\nlevel = 'off'\n"})
+        root = helpers.make_repo({"AGENTS.md": text, ".agentfile-lint.toml": "[rules.R3b]\nlevel = 'off'\n"})
         r = helpers.run_new(root, "--warn-as-error")
         self.assertEqual((r.returncode, r.stdout, r.stderr), (0, "", ""))
         # ...and the same copy fails when it is made too large (the check is really running).
@@ -21,7 +21,7 @@ class SelfCheckTest(unittest.TestCase):
 
     def test_version_guard_message(self):
         # Only checks the guard is wired; behaviour on <3.11 cannot be exercised on this interpreter.
-        text = (helpers.REPO / "instruction_lint" / "cli.py").read_text(encoding="utf-8")
+        text = (helpers.REPO / "agentfile_lint" / "cli.py").read_text(encoding="utf-8")
         self.assertIn("needs Python >= 3.11", text)
 
 

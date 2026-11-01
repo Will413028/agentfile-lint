@@ -10,13 +10,13 @@ from pathlib import Path
 
 import helpers
 
-ENTRY = "instruction-lint.py"
+ENTRY = "agentfile-lint.py"
 
 
 def vendor(dest, *extra):
     env = dict(os.environ, PYTHONPATH=str(helpers.REPO))
     return subprocess.run(
-        [sys.executable, "-m", "instruction_lint", "vendor", "--to", str(dest),
+        [sys.executable, "-m", "agentfile_lint", "vendor", "--to", str(dest),
          "--ref-tag", "v9.9.9", "--ref-commit", "a" * 40, *extra],
         capture_output=True, text=True, env=env,
     )
@@ -46,9 +46,9 @@ class VendorTest(unittest.TestCase):
         files = tree(self.a)
         self.assertIn(ENTRY, files)
         self.assertIn("verify.py", files)
-        self.assertIn("instruction_lint/presets/default.toml", files)
+        self.assertIn("agentfile_lint/presets/default.toml", files)
         self.assertFalse([n for n in files if "__pycache__" in n or n.endswith(".pyc")])
-        self.assertNotIn("instruction_lint/vendor.py", files)
+        self.assertNotIn("agentfile_lint/vendor.py", files)
         readme = files["README.md"].decode()
         self.assertIn("`v9.9.9`", readme)
         self.assertIn("a" * 40, readme)
@@ -70,7 +70,7 @@ class VendorTest(unittest.TestCase):
         self.assertEqual((r.returncode, r.stderr), (0, ""))
 
     def test_verify_fails_on_modified_file(self):
-        for name in ("instruction_lint/cli.py", "instruction_lint/presets/default.toml", ENTRY, "verify.py"):
+        for name in ("agentfile_lint/cli.py", "agentfile_lint/presets/default.toml", ENTRY, "verify.py"):
             d = self.tmp / ("m-" + name.replace("/", "_"))
             shutil.copytree(self.a, d)
             with open(d / name, "ab") as fh:
@@ -80,22 +80,22 @@ class VendorTest(unittest.TestCase):
             self.assertIn(name, r.stderr)
 
     def test_verify_fails_on_extra_file(self):
-        (self.a / "instruction_lint" / "extra.py").write_text("x = 1\n")
+        (self.a / "agentfile_lint" / "extra.py").write_text("x = 1\n")
         r = verify(self.a)
         self.assertEqual(r.returncode, 1)
-        self.assertIn("instruction_lint/extra.py", r.stderr)
+        self.assertIn("agentfile_lint/extra.py", r.stderr)
 
     def test_verify_ignores_pycache(self):
-        cache = self.a / "instruction_lint" / "__pycache__"
+        cache = self.a / "agentfile_lint" / "__pycache__"
         cache.mkdir()
         (cache / "x.pyc").write_bytes(b"\0")
         self.assertEqual(verify(self.a).returncode, 0)
 
     def test_verify_fails_on_deleted_file(self):
-        (self.a / "instruction_lint" / "engine.py").unlink()
+        (self.a / "agentfile_lint" / "engine.py").unlink()
         r = verify(self.a)
         self.assertEqual(r.returncode, 1)
-        self.assertIn("instruction_lint/engine.py", r.stderr)
+        self.assertIn("agentfile_lint/engine.py", r.stderr)
 
     def test_refuses_non_empty_target_without_force(self):
         r = vendor(self.a)
@@ -116,7 +116,7 @@ class VendorTest(unittest.TestCase):
         cases = [
             {"AGENTS.md": "ok\n"},
             {"AGENTS.md": "z" * 13000 + "\n", "sub/AGENTS.md": "y" * 600 + "\n"},
-            {"AGENTS.md": "ok\n", ".instruction-lint.toml": "bogus = 1\n"},
+            {"AGENTS.md": "ok\n", ".agentfile-lint.toml": "bogus = 1\n"},
         ]
         for files in cases:
             root = helpers.make_repo(files)
@@ -132,7 +132,7 @@ class VendorTest(unittest.TestCase):
     def test_version_flag(self):
         r = helpers.run_new(self.tmp, "--version")
         self.assertEqual(r.returncode, 0)
-        self.assertRegex(r.stdout, r"instruction-lint \d+\.\d+\.\d+")
+        self.assertRegex(r.stdout, r"agentfile-lint \d+\.\d+\.\d+")
 
 
 if __name__ == "__main__":

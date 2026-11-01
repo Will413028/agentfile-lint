@@ -2,7 +2,7 @@ import subprocess
 import unittest
 
 import helpers
-from instruction_lint import discover
+from agentfile_lint import discover
 
 GLOBS = ["AGENTS.md", "**/AGENTS.md", "CLAUDE.md", "**/CLAUDE.md"]
 BIG = "x" * 600 + "\n"

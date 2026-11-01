@@ -3,6 +3,37 @@
 All notable changes are listed here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-11-01
+
+The project is renamed from `instruction-lint` to `agentfile-lint`. The name `instruction-lint` is already
+taken on PyPI by an unrelated package, so a bare `uvx instruction-lint` or `pip install instruction-lint`
+would install someone else's code. While the version is below 1.0, a minor release may carry breaking
+changes; this one does. Read the upgrade recipe before moving a pin.
+
+### Changed (breaking)
+
+- Python package: `instruction_lint` is now `agentfile_lint`; run it as `python -m agentfile_lint`.
+- Distribution name and console command: `agentfile-lint`.
+- Repo config file: `.agentfile-lint.toml`. If only `.instruction-lint.toml` exists, the tool exits with
+  code 2 and a message asking you to rename it; it does not read the old file. This check is removed at 1.0.
+- pre-commit hook id and name: `agentfile-lint`.
+- GitHub Action: name `agentfile-lint`; it runs `python -m agentfile_lint`.
+- Vendored entry script: `agentfile-lint.py` (was `instruction-lint.py`); the vendored package directory is
+  `agentfile_lint/`.
+- `check-pins` looks for `agentfile-lint` by default (`check_pins.repo`).
+
+Upgrade recipe:
+
+1. `git mv .instruction-lint.toml .agentfile-lint.toml`.
+2. Change every reference to the repository URL to `github.com/Will413028/agentfile-lint` (the old URL
+   redirects, but `check-pins` matches the new name) and pin the new full commit SHA everywhere.
+3. In `.pre-commit-config.yaml`, change the hook `id` to `agentfile-lint`.
+4. Replace the command `instruction-lint ...` with `agentfile-lint ...` (or `python -m instruction_lint` with
+   `python -m agentfile_lint`) in scripts, CI and `uvx --from git+...` lines.
+5. Vendored copies: run `agentfile-lint vendor --to <dir> --force`, delete the old `instruction-lint.py` and
+   `instruction_lint/`, and update the call sites to `agentfile-lint.py`.
+6. Run `agentfile-lint check-pins` and the normal check.
+
 ## [0.3.1] - 2026-11-01
 
 ### Changed

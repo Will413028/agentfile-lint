@@ -1,6 +1,6 @@
 # Review rubric for instruction files
 
-`instruction-lint` checks what a program can decide: size, shape, references that must resolve,
+`agentfile-lint` checks what a program can decide: size, shape, references that must resolve,
 text that rots, duplicated lines. This rubric covers what it cannot decide. It is for a human
 reviewer or for an agent asked to audit an instruction file (for example an interactive prompt
 audit), and it never runs as a CI gate: its answers are not deterministic and the text under review
@@ -11,7 +11,7 @@ list of findings, or "no findings") into the pull request; see `docs/pr-template
 
 ## How to review
 
-1. Run `instruction-lint` first. Do not re-report what it already prints.
+1. Run `agentfile-lint` first. Do not re-report what it already prints.
 2. Read the diff, then the whole changed file; most problems are in how a new line sits next to old ones.
 3. For each criterion below, say "ok" or quote the line and say what is wrong. Prefer one concrete
    fix per finding. Stop at the findings that change what an agent would do.

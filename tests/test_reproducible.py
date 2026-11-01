@@ -9,7 +9,7 @@ TOML = (
 
 class DateInjectionTest(unittest.TestCase):
     def setUp(self):
-        self.root = helpers.make_repo({"AGENTS.md": "z" * 600 + "\n", ".instruction-lint.toml": TOML})
+        self.root = helpers.make_repo({"AGENTS.md": "z" * 600 + "\n", ".agentfile-lint.toml": TOML})
 
     def run_at(self, day):
         r = helpers.run_new(self.root, "--today", day)

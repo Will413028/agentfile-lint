@@ -3,7 +3,7 @@ import unittest
 
 import helpers
 
-CFG = ".instruction-lint.toml"
+CFG = ".agentfile-lint.toml"
 
 
 def limits(*entries):
@@ -90,7 +90,7 @@ class SizeLimitsTest(unittest.TestCase):
 def _preset_limits():
     from importlib import resources
     import tomllib
-    text = (resources.files("instruction_lint") / "presets" / "default.toml").read_text(encoding="utf-8")
+    text = (resources.files("agentfile_lint") / "presets" / "default.toml").read_text(encoding="utf-8")
     return tomllib.loads(text)["rules"]["R1"]["limits"]
 
 

@@ -2,8 +2,8 @@ import datetime
 import unittest
 
 import helpers
-from instruction_lint import allowlist, config
-from instruction_lint.errors import ConfigError
+from agentfile_lint import allowlist, config
+from agentfile_lint.errors import ConfigError
 
 TODAY = "2026-06-01"
 BIG = "x" * 600 + "\n"  # one line over the 500-char limit -> an R1 finding on line 1
@@ -14,7 +14,7 @@ def entry(path="AGENTS.md", expires="2026-06-30", rule="R1", reason="cleanup tra
 
 
 def run(files, toml, *extra):
-    root = helpers.make_repo({**files, ".instruction-lint.toml": toml})
+    root = helpers.make_repo({**files, ".agentfile-lint.toml": toml})
     return helpers.run_new(root, "--today", TODAY, *extra)
 
 

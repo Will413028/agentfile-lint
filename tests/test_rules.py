@@ -8,7 +8,7 @@ def lint(files, config="", *args):
     """Run the tool in a temp git repo; returns (exit code, stdout lines, stderr lines)."""
     files = dict(files)
     if config:
-        files[".instruction-lint.toml"] = config
+        files[".agentfile-lint.toml"] = config
     r = helpers.run_new(helpers.make_repo(files), "--today", "2026-06-01", *args)
     return r.returncode, r.stdout.splitlines(), r.stderr.splitlines()
 

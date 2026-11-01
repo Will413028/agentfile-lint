@@ -1,4 +1,4 @@
-# Default preset shipped with instruction-lint. Repo configs extend it and override single keys.
+# Default preset shipped with agentfile-lint. Repo configs extend it and override single keys.
 extends = []
 
 [discover]

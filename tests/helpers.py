@@ -29,7 +29,7 @@ def make_repo(files: dict[str, str | bytes], track: bool = True) -> Path:
 def run_new(root: Path, *args: str) -> subprocess.CompletedProcess:
     env = dict(os.environ, PYTHONPATH=str(REPO))
     return subprocess.run(
-        [sys.executable, "-m", "instruction_lint", *args],
+        [sys.executable, "-m", "agentfile_lint", *args],
         cwd=root, env=env, capture_output=True, text=True,
     )
 

@@ -27,7 +27,7 @@ locally and in CI does.
 ## Model
 
 ```
-preset (shipped) <- repo config (.instruction-lint.toml, `extends`) -> effective config
+preset (shipped) <- repo config (.agentfile-lint.toml, `extends`) -> effective config
 effective config + git ls-files (full set) -> rules -> findings -> allowlist -> output + exit code
 ```
 
@@ -137,14 +137,14 @@ contract; changing them is a major version change.
 
 ## Subcommands
 
-- `instruction-lint check-pins`: every reference to this tool (pre-commit `rev:`, `uvx --from git+...@<sha>`,
-  `uses: owner/instruction-lint@<sha>`) must be a full 40-hex SHA and all must be equal; output
+- `agentfile-lint check-pins`: every reference to this tool (pre-commit `rev:`, `uvx --from git+...@<sha>`,
+  `uses: owner/agentfile-lint@<sha>`) must be a full 40-hex SHA and all must be equal; output
   `file:line: check-pins: message`, exit 1. Line scanning, no YAML parser; limits are listed in
   `docs/versioning.md` and the module docstring.
-- `instruction-lint config --format json`: the effective merged configuration (preset, extends,
+- `agentfile-lint config --format json`: the effective merged configuration (preset, extends,
   repo config, defaults filled in) as JSON with sorted keys, so another program (a test in a language
   without a TOML parser) can read the same values the linter uses. Exit 2 on an invalid config.
-- `instruction-lint vendor`: see Vendored copy.
+- `agentfile-lint vendor`: see Vendored copy.
 
 ## Judgment checks
 
@@ -173,14 +173,14 @@ and `docs/pr-template-snippet.md` is the pull request prompt that asks for the r
 
 ## Vendored copy
 
-For environments that cannot install from git, `instruction-lint vendor --to <dir>` writes one
+For environments that cannot install from git, `agentfile-lint vendor --to <dir>` writes one
 self-contained directory: the runner package with the default preset, an entry script
-(`instruction-lint.py`), `verify.py` and a `README.md` that records the upstream tag, the upstream
+(`agentfile-lint.py`), `verify.py` and a `README.md` that records the upstream tag, the upstream
 commit and a SHA-256 for every file. Options: `--ref-tag` / `--ref-commit` (default: the exact tag
 and HEAD of the source checkout, else `untagged`), `--force` (replace a non-empty target).
 
-- Run it from the repository root: `python3 <dir>/instruction-lint.py` (Python >= 3.11, standard
-  library only, no network). Its output and exit codes equal `python3 -m instruction_lint`.
+- Run it from the repository root: `python3 <dir>/agentfile-lint.py` (Python >= 3.11, standard
+  library only, no network). Its output and exit codes equal `python3 -m agentfile_lint`.
 - The output is reproducible: same source and same two upstream values give a byte-identical tree
   (sorted order, fixed newlines, no timestamps, no machine paths or user names).
 - `python3 <dir>/verify.py` recomputes the hashes and fails (exit 1, naming the file) on a

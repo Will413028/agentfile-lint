@@ -1,10 +1,10 @@
-# instruction-lint
+# agentfile-lint
 
 A linter for agent instruction files (`AGENTS.md`, `CLAUDE.md`). Rules and limits live in one
 TOML file; the runner is a thin Python program that uses only the standard library
 (Python 3.11 or newer). A local git hook and CI call the same program with the same config.
 
-Status: version 0.3.1. Every rule except `R1` ships at `warn`; raise a rule to `error` in your own config once it is clean.
+Status: version 0.4.0. Every rule except `R1` ships at `warn`; raise a rule to `error` in your own config once it is clean.
 
 | Rule | Level (default) | What it checks |
 |---|---|---|
@@ -22,19 +22,19 @@ Status: version 0.3.1. Every rule except `R1` ships at `warn`; raise a rule to `
 ## Usage
 
 ```sh
-python3 -m instruction_lint            # from a git repository; analyzes tracked files only
-instruction-lint --list-rules          # rules and their effective levels
-instruction-lint --today 2026-01-31    # replace the current date (reproducible runs)
-instruction-lint --config path.toml    # explicit config instead of .instruction-lint.toml
-instruction-lint --warn-as-error
+python3 -m agentfile_lint            # from a git repository; analyzes tracked files only
+agentfile-lint --list-rules          # rules and their effective levels
+agentfile-lint --today 2026-01-31    # replace the current date (reproducible runs)
+agentfile-lint --config path.toml    # explicit config instead of .agentfile-lint.toml
+agentfile-lint --warn-as-error
 ```
 
 Other commands:
 
 ```sh
-instruction-lint check-pins            # every reference to this tool pins the same full commit SHA
-instruction-lint config --format json  # the effective merged configuration, sorted keys
-instruction-lint vendor --to DIR       # a pinned, self-contained copy (see below)
+agentfile-lint check-pins            # every reference to this tool pins the same full commit SHA
+agentfile-lint config --format json  # the effective merged configuration, sorted keys
+agentfile-lint vendor --to DIR       # a pinned, self-contained copy (see below)
 ```
 
 Output is one line per finding: `file:line: rule-id: message`. Findings about a whole file use
@@ -47,7 +47,7 @@ files (`*.local.md`) are never analyzed.
 
 ## Configuration
 
-`.instruction-lint.toml` at the repository root extends the shipped preset. Unknown keys fail.
+`.agentfile-lint.toml` at the repository root extends the shipped preset. Unknown keys fail.
 
 ```toml
 extends = ["preset:default"]        # default; other entries are paths relative to this file
@@ -85,10 +85,10 @@ expires = 2026-12-31
 pre-commit:
 
 ```yaml
-- repo: https://github.com/Will413028/instruction-lint
+- repo: https://github.com/Will413028/agentfile-lint
   rev: <tag or full commit SHA>
   hooks:
-    - id: instruction-lint
+    - id: agentfile-lint
 ```
 
 Run on every commit and push: rules R3a, R3b and R3c read test files, source and docs, and cross-file
@@ -100,8 +100,8 @@ lefthook (no path filter):
 ```yaml
 pre-commit:
   commands:
-    instruction-lint:
-      run: python3 -m instruction_lint
+    agentfile-lint:
+      run: python3 -m agentfile_lint
 ```
 
 GitHub Actions (pin to a full commit SHA; no `paths:` filter, plus a weekly run so allowlist expiry
@@ -116,7 +116,7 @@ on:
 
 # steps:
 - uses: actions/checkout@<sha>
-- uses: Will413028/instruction-lint@<sha>
+- uses: Will413028/agentfile-lint@<sha>
 ```
 
 Rules above `R1` need configuration to be useful (section lists, base directories, spec mappings);
@@ -129,14 +129,14 @@ Design notes are in `docs/design.md`, decisions in `docs/adr/`.
 
 ## Vendored copy
 
-For environments that cannot install from git, `instruction-lint vendor --to <dir>` writes one
+For environments that cannot install from git, `agentfile-lint vendor --to <dir>` writes one
 self-contained directory: the runner package with the default preset, an entry script
-(`instruction-lint.py`), `verify.py` and a `README.md` that records the upstream tag, the upstream
+(`agentfile-lint.py`), `verify.py` and a `README.md` that records the upstream tag, the upstream
 commit and a SHA-256 for every file. Options: `--ref-tag` / `--ref-commit` (default: the exact tag
 and HEAD of the source checkout, else `untagged`), `--force` (replace a non-empty target).
 
-- Run it from the repository root: `python3 <dir>/instruction-lint.py` (Python >= 3.11, standard
-  library only, no network). Its output and exit codes equal `python3 -m instruction_lint`.
+- Run it from the repository root: `python3 <dir>/agentfile-lint.py` (Python >= 3.11, standard
+  library only, no network). Its output and exit codes equal `python3 -m agentfile_lint`.
 - The output is reproducible: same source and same two upstream values give a byte-identical tree
   (sorted order, fixed newlines, no timestamps, no machine paths or user names).
 - `python3 <dir>/verify.py` recomputes the hashes and fails (exit 1, naming the file) on a

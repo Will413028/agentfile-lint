@@ -16,17 +16,34 @@ from . import allowlist
 from .errors import LEVELS, ConfigError, check_keys, expect_int, expect_str, expect_str_list
 from .rules import RULES
 
-CONFIG_NAME = ".instruction-lint.toml"
+CONFIG_NAME = ".agentfile-lint.toml"
+# Migration aid for the 0.4.0 rename; remove at 1.0.
+LEGACY_CONFIG_NAME = ".instruction-lint.toml"
 PRESET_PREFIX = "preset:"
 DEFAULT_PRESET = "preset:default"
 _TOP_KEYS = {"extends", "discover", "allowlist", "rules", "check_pins"}
 PIN_DEFAULTS = {
-    "repo": "instruction-lint",
+    "repo": "agentfile-lint",
     "files": [
         ".pre-commit-config.yaml", ".pre-commit-config.yml", "lefthook.yml", "lefthook.yaml",
         ".lefthook.yml", ".lefthook.yaml", ".github/workflows/*.yml", ".github/workflows/*.yaml",
     ],
 }
+
+
+def default_config_path(root: Path | None) -> Path | None:
+    """The repo-root config file, or None. Fails when only the pre-0.4.0 file name exists."""
+    if root is None:
+        return None
+    path = root / CONFIG_NAME
+    if path.is_file():
+        return path
+    if (root / LEGACY_CONFIG_NAME).is_file():
+        raise ConfigError(
+            f"found {LEGACY_CONFIG_NAME}, which agentfile-lint no longer reads; "
+            f"rename it to {CONFIG_NAME} (git mv {LEGACY_CONFIG_NAME} {CONFIG_NAME})"
+        )
+    return None
 
 
 @dataclass
@@ -78,7 +95,7 @@ def _load_raw(ref: str, base_dir: Path | None, seen: tuple[str, ...]) -> dict[st
         name = ref[len(PRESET_PREFIX):]
         key = ref
         try:
-            text = (resources.files("instruction_lint") / "presets" / f"{name}.toml").read_text(encoding="utf-8")
+            text = (resources.files("agentfile_lint") / "presets" / f"{name}.toml").read_text(encoding="utf-8")
         except (FileNotFoundError, OSError) as exc:
             raise ConfigError(f"unknown preset {name!r}") from exc
         data = _read(ref, text)

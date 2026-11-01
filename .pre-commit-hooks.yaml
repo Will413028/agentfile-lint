@@ -1,7 +1,7 @@
-- id: instruction-lint
-  name: instruction-lint
+- id: agentfile-lint
+  name: agentfile-lint
   description: Lint agent instruction files (AGENTS.md / CLAUDE.md).
-  entry: instruction-lint
+  entry: agentfile-lint
   language: python
   # Cross-file rules (R3a/R3b/R3c) read test files, source and docs, so the hook must run on every
   # commit and cannot be filtered by instruction files. The tool analyzes the full tracked set.

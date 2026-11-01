@@ -2,14 +2,14 @@ import unittest
 from pathlib import Path
 
 import helpers
-from instruction_lint import config
+from agentfile_lint import config
 import datetime
 
 TODAY = datetime.date(2026, 6, 1)
 
 
 def run(toml, *extra):
-    root = helpers.make_repo({"AGENTS.md": "ok\n", ".instruction-lint.toml": toml})
+    root = helpers.make_repo({"AGENTS.md": "ok\n", ".agentfile-lint.toml": toml})
     return helpers.run_new(root, "--today", "2026-06-01", *extra)
 
 
@@ -53,18 +53,18 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(r.returncode, 2)
 
     def test_repo_override_changes_a_single_limit(self):
-        root = helpers.make_repo({"AGENTS.md": "x\n" * 60, ".instruction-lint.toml": LIMIT_100})
+        root = helpers.make_repo({"AGENTS.md": "x\n" * 60, ".agentfile-lint.toml": LIMIT_100})
         r = helpers.run_new(root)
         self.assertEqual(r.returncode, 1)
         self.assertIn("AGENTS.md:0: R1: file is 120 bytes, limit 100", r.stderr)
 
     def test_levels_warn_and_off(self):
         files = {"AGENTS.md": "y" * 600 + "\n"}
-        warn = helpers.make_repo({**files, ".instruction-lint.toml": "[rules.R1]\nlevel = 'warn'\n"})
+        warn = helpers.make_repo({**files, ".agentfile-lint.toml": "[rules.R1]\nlevel = 'warn'\n"})
         r = helpers.run_new(warn)
         self.assertEqual((r.returncode, r.stderr), (0, ""))
         self.assertIn("AGENTS.md:1: R1: line is 600 characters, limit 500", r.stdout)
-        off = helpers.make_repo({**files, ".instruction-lint.toml": "[rules.R1]\nlevel = 'off'\n"})
+        off = helpers.make_repo({**files, ".agentfile-lint.toml": "[rules.R1]\nlevel = 'off'\n"})
         r = helpers.run_new(off)
         self.assertEqual((r.returncode, r.stdout, r.stderr), (0, "", ""))
 
@@ -72,7 +72,7 @@ class ConfigTest(unittest.TestCase):
         root = helpers.make_repo({
             "AGENTS.md": "x\n" * 60,
             "base.toml": LIMIT_100,
-            ".instruction-lint.toml": "extends = ['preset:default', 'base.toml']\n",
+            ".agentfile-lint.toml": "extends = ['preset:default', 'base.toml']\n",
         })
         self.assertEqual(helpers.run_new(root).returncode, 1)
         cyc = helpers.make_repo({"AGENTS.md": "ok\n", "a.toml": "extends = ['b.toml']\n", "b.toml": "extends = ['a.toml']\n"})
@@ -85,10 +85,21 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(r.returncode, 2)
 
     def test_list_rules_shows_effective_levels(self):
-        root = helpers.make_repo({"AGENTS.md": "ok\n", ".instruction-lint.toml": "[rules.R1]\nlevel = 'warn'\n"})
+        root = helpers.make_repo({"AGENTS.md": "ok\n", ".agentfile-lint.toml": "[rules.R1]\nlevel = 'warn'\n"})
         r = helpers.run_new(root, "--list-rules")
         self.assertEqual(r.returncode, 0)
         self.assertRegex(r.stdout, r"(?m)^R1  warn +size:")
+
+    def test_legacy_config_name_fails_with_rename_hint(self):
+        root = helpers.make_repo({"AGENTS.md": "ok\n", ".instruction-lint.toml": "[rules.R1]\nlevel = 'warn'\n"})
+        for args in ((), ("--list-rules",), ("config",), ("check-pins",)):
+            r = helpers.run_new(root, *args)
+            self.assertEqual(r.returncode, 2, args)
+            self.assertIn("rename it to .agentfile-lint.toml", r.stderr)
+
+    def test_new_name_wins_over_legacy_name(self):
+        root = helpers.make_repo({"AGENTS.md": "ok\n", ".instruction-lint.toml": "x = 1\n", ".agentfile-lint.toml": ""})
+        self.assertEqual(helpers.run_new(root).returncode, 0)
 
     def test_bad_today_is_usage_error(self):
         root = helpers.make_repo({"AGENTS.md": "ok\n"})

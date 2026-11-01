@@ -9,7 +9,7 @@ from __future__ import annotations
 import sys
 
 if sys.version_info < (3, 11):  # checked before importing anything that needs tomllib
-    sys.stderr.write(f"instruction-lint needs Python >= 3.11, found {sys.version.split()[0]}\n")
+    sys.stderr.write(f"agentfile-lint needs Python >= 3.11, found {sys.version.split()[0]}\n")
     raise SystemExit(2)
 
 import argparse
@@ -26,11 +26,11 @@ from .rules import RULES
 
 
 def _parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="instruction-lint", description="Lint agent instruction files.")
+    p = argparse.ArgumentParser(prog="agentfile-lint", description="Lint agent instruction files.")
     p.add_argument("files", nargs="*", help="only decides whether to run; the full tracked set is always analyzed")
     p.add_argument("--config", help=f"config file (default: {config_mod.CONFIG_NAME} at the repo root, if present)")
     p.add_argument("--today", help="YYYY-MM-DD, replaces the current date (reproducible runs)")
-    p.add_argument("--version", action="version", version=f"instruction-lint {__version__}")
+    p.add_argument("--version", action="version", version=f"agentfile-lint {__version__}")
     p.add_argument("--list-rules", action="store_true", help="print the rules and their effective levels, then exit")
     p.add_argument("--warn-as-error", action="store_true", help="treat warnings as errors")
     return p
@@ -49,8 +49,8 @@ def _relevant(files: list[str], root: Path, cwd: Path, globs: list[str]) -> bool
 
 
 def _config_main(argv: list[str]) -> int:
-    """`instruction-lint config --format json`: the effective (merged, validated) configuration."""
-    p = argparse.ArgumentParser(prog="instruction-lint config", description="Print the effective configuration.")
+    """`agentfile-lint config --format json`: the effective (merged, validated) configuration."""
+    p = argparse.ArgumentParser(prog="agentfile-lint config", description="Print the effective configuration.")
     p.add_argument("--format", choices=["json"], default="json", help="output format (only json)")
     p.add_argument("--config", help=f"config file (default: {config_mod.CONFIG_NAME} at the repo root, if present)")
     p.add_argument("--today", help="YYYY-MM-DD, used to validate allowlist expiry dates")
@@ -58,7 +58,7 @@ def _config_main(argv: list[str]) -> int:
     try:
         today = datetime.date.fromisoformat(args.today) if args.today else datetime.date.today()
     except ValueError:
-        sys.stderr.write("instruction-lint: --today must be YYYY-MM-DD\n")
+        sys.stderr.write("agentfile-lint: --today must be YYYY-MM-DD\n")
         return 2
     try:
         cfg_path = Path(args.config) if args.config else None
@@ -67,11 +67,10 @@ def _config_main(argv: list[str]) -> int:
                 root = discover.repo_root(Path.cwd())
             except discover.DiscoverError:
                 root = None
-            if root is not None and (root / config_mod.CONFIG_NAME).is_file():
-                cfg_path = root / config_mod.CONFIG_NAME
+            cfg_path = config_mod.default_config_path(root)
         cfg = config_mod.load(cfg_path, today)
     except ConfigError as exc:
-        sys.stderr.write(f"instruction-lint: {exc}\n")
+        sys.stderr.write(f"agentfile-lint: {exc}\n")
         return 2
     sys.stdout.write(json.dumps(config_mod.to_jsonable(cfg), sort_keys=True, indent=2, ensure_ascii=False) + "\n")
     return 0
@@ -83,7 +82,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             from . import vendor
         except ImportError:
-            sys.stderr.write("instruction-lint: vendor is only available from a source checkout\n")
+            sys.stderr.write("agentfile-lint: vendor is only available from a source checkout\n")
             return 2
         return vendor.main(argv[1:])
     if argv and argv[0] == "check-pins":
@@ -95,7 +94,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         today = datetime.date.fromisoformat(args.today) if args.today else datetime.date.today()
     except ValueError:
-        sys.stderr.write("instruction-lint: --today must be YYYY-MM-DD\n")
+        sys.stderr.write("agentfile-lint: --today must be YYYY-MM-DD\n")
         return 2
     cwd = Path.cwd()
     try:
@@ -106,11 +105,11 @@ def main(argv: list[str] | None = None) -> int:
                 raise
             root = None
         cfg_path = Path(args.config) if args.config else None
-        if cfg_path is None and root is not None and (root / config_mod.CONFIG_NAME).is_file():
-            cfg_path = root / config_mod.CONFIG_NAME
+        if cfg_path is None:
+            cfg_path = config_mod.default_config_path(root)
         cfg = config_mod.load(cfg_path, today)
     except (ConfigError, discover.DiscoverError) as exc:
-        sys.stderr.write(f"instruction-lint: {exc}\n")
+        sys.stderr.write(f"agentfile-lint: {exc}\n")
         return 2
 
     if args.list_rules:

@@ -6,7 +6,7 @@ import unittest
 import helpers
 
 CHANGELOG = (helpers.REPO / "CHANGELOG.md").read_text(encoding="utf-8")
-PRESET = tomllib.loads((helpers.REPO / "instruction_lint" / "presets" / "default.toml").read_text(encoding="utf-8"))
+PRESET = tomllib.loads((helpers.REPO / "agentfile_lint" / "presets" / "default.toml").read_text(encoding="utf-8"))
 
 
 def graduated(text):
@@ -37,7 +37,7 @@ class VersioningTest(unittest.TestCase):
         self.assertEqual(graduated(text), {"R1"})
 
     def test_version_strings_and_changelog_agree(self):
-        version_line = (helpers.REPO / "instruction_lint" / "__init__.py").read_text(encoding="utf-8")
+        version_line = (helpers.REPO / "agentfile_lint" / "__init__.py").read_text(encoding="utf-8")
         __version__ = re.search(r'__version__ = "([^"]+)"', version_line).group(1)
         pyproject = tomllib.loads((helpers.REPO / "pyproject.toml").read_text(encoding="utf-8"))
         self.assertEqual(pyproject["project"]["version"], __version__)

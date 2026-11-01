@@ -1,4 +1,4 @@
-"""`instruction-lint vendor --to DIR`: write a self-contained, reproducible copy of the runner.
+"""`agentfile-lint vendor --to DIR`: write a self-contained, reproducible copy of the runner.
 
 The copy holds the package (python files and the default preset), an entry script, verify.py and
 a README with the upstream tag, commit and a SHA-256 per file. Output depends only on the source
@@ -16,7 +16,7 @@ from pathlib import Path
 from . import __version__
 
 PKG = Path(__file__).resolve().parent
-ENTRY_NAME = "instruction-lint.py"
+ENTRY_NAME = "agentfile-lint.py"
 BEGIN = "<!-- manifest:begin -->"
 END = "<!-- manifest:end -->"
 
@@ -34,7 +34,7 @@ def _upstream(ref_tag: str | None, ref_commit: str | None) -> tuple[str, str]:
     commit = ref_commit
     if commit is None:
         commit = _git(["rev-parse", "HEAD"]) or "unknown"
-        if commit != "unknown" and _git(["status", "--porcelain", "--", "instruction_lint"]):
+        if commit != "unknown" and _git(["status", "--porcelain", "--", "agentfile_lint"]):
             commit += "-dirty"  # the copy differs from the recorded commit
     return tag, commit
 
@@ -48,7 +48,7 @@ def _package_files() -> dict[str, bytes]:
             continue
         if rel.as_posix() == "vendor.py" or path.suffix not in (".py", ".toml"):
             continue
-        out[f"instruction_lint/{rel.as_posix()}"] = path.read_bytes()
+        out[f"agentfile_lint/{rel.as_posix()}"] = path.read_bytes()
     return out
 
 
@@ -58,9 +58,9 @@ def build(tag: str, commit: str) -> dict[str, bytes]:
         files[name] = (PKG / "_vendor" / template).read_bytes()
     files = dict(sorted(files.items()))
     manifest = "\n".join(f"{hashlib.sha256(c).hexdigest()}  {n}" for n, c in files.items())
-    readme = f"""# instruction-lint (vendored copy)
+    readme = f"""# agentfile-lint (vendored copy)
 
-A pinned copy of instruction-lint. Standard library only, Python >= 3.11, no network.
+A pinned copy of agentfile-lint. Standard library only, Python >= 3.11, no network.
 
 - Upstream tag: `{tag}`
 - Upstream commit: `{commit}`
@@ -114,7 +114,7 @@ def _check_target(target: Path, force: bool) -> str | None:
 
 
 def main(argv: list[str]) -> int:
-    p = argparse.ArgumentParser(prog="instruction-lint vendor", description="Write a self-contained copy of the runner.")
+    p = argparse.ArgumentParser(prog="agentfile-lint vendor", description="Write a self-contained copy of the runner.")
     p.add_argument("--to", required=True, help="target directory (created if missing)")
     p.add_argument("--force", action="store_true", help="replace the contents of a non-empty target")
     p.add_argument("--ref-tag", help="upstream tag to record (default: exact tag of this checkout, else 'untagged')")
@@ -123,7 +123,7 @@ def main(argv: list[str]) -> int:
     target = Path(args.to)
     err = _check_target(target, args.force)
     if err:
-        sys.stderr.write(f"instruction-lint: {err}\n")
+        sys.stderr.write(f"agentfile-lint: {err}\n")
         return 2
     tag, commit = _upstream(args.ref_tag, args.ref_commit)
     files = build(tag, commit)

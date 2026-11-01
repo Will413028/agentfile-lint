@@ -1,4 +1,4 @@
-"""`instruction-lint check-pins`: every reference to this tool in a repository pins the same full SHA.
+"""`agentfile-lint check-pins`: every reference to this tool in a repository pins the same full SHA.
 
 A consumer references the tool from several places (a pre-commit hook, a lefthook command, CI
 workflows). If they pin different commits, the local hook and CI quietly run different rules.
@@ -8,7 +8,7 @@ There is no YAML parser here (standard library only); the files are scanned line
 - pre-commit: a `repo:` line whose value contains the repo string starts an entry; the next `rev:`
   line before the following `repo:` line is its pin.
 - anywhere else (lefthook, workflows): a line that contains the repo string and `@<ref>`, as in
-  `uvx --from git+https://host/owner/instruction-lint@<sha>` or `uses: owner/instruction-lint@<sha>`.
+  `uvx --from git+https://host/owner/agentfile-lint@<sha>` or `uses: owner/agentfile-lint@<sha>`.
   A `uses:`/`git+` line naming the repo with no `@<ref>` is reported as unpinned.
 
 Limits: no anchors/aliases, no multi-line scalars, no expression expansion (`${{ ... }}` is not a SHA
@@ -89,8 +89,8 @@ def evaluate(refs: list[Ref]) -> list[tuple[str, int, str]]:
 
 
 def main(argv: list[str]) -> int:
-    p = argparse.ArgumentParser(prog="instruction-lint check-pins", description="Check that every reference to this tool pins the same full commit SHA.")
-    p.add_argument("--repo", help="string identifying this tool's repository in a reference (default: check_pins.repo from the config, else 'instruction-lint')")
+    p = argparse.ArgumentParser(prog="agentfile-lint check-pins", description="Check that every reference to this tool pins the same full commit SHA.")
+    p.add_argument("--repo", help="string identifying this tool's repository in a reference (default: check_pins.repo from the config, else 'agentfile-lint')")
     p.add_argument("--config", help=f"config file (default: {config_mod.CONFIG_NAME} at the repo root, if present)")
     p.add_argument("--files", nargs="+", metavar="GLOB", help="files to scan, as globs relative to the repo root (default: check_pins.files)")
     p.add_argument("--require-refs", action="store_true", help="fail when no reference is found (default: report and pass)")
@@ -98,12 +98,12 @@ def main(argv: list[str]) -> int:
     try:
         root = discover.repo_root(Path.cwd())
         cfg_path = Path(args.config) if args.config else None
-        if cfg_path is None and (root / config_mod.CONFIG_NAME).is_file():
-            cfg_path = root / config_mod.CONFIG_NAME
+        if cfg_path is None:
+            cfg_path = config_mod.default_config_path(root)
         import datetime
         cfg = config_mod.load(cfg_path, datetime.date.today())
     except (ConfigError, discover.DiscoverError) as exc:
-        sys.stderr.write(f"instruction-lint: {exc}\n")
+        sys.stderr.write(f"agentfile-lint: {exc}\n")
         return 2
     repo = args.repo or cfg.check_pins["repo"]
     globs = args.files or cfg.check_pins["files"]

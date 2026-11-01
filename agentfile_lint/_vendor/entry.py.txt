@@ -1,4 +1,4 @@
-"""instruction-lint, vendored copy. Run: python3 instruction-lint.py [options]
+"""agentfile-lint, vendored copy. Run: python3 agentfile-lint.py [options]
 
 Standard library only. Verify the copy first with: python3 verify.py
 """
@@ -6,13 +6,13 @@ import os
 import sys
 
 if sys.version_info < (3, 11):
-    sys.stderr.write(f"instruction-lint needs Python >= 3.11, found {sys.version.split()[0]}\n")
+    sys.stderr.write(f"agentfile-lint needs Python >= 3.11, found {sys.version.split()[0]}\n")
     raise SystemExit(2)
 
 sys.dont_write_bytecode = True
 # `python3 -I` does not put the script directory on sys.path, so add it explicitly.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from instruction_lint.cli import main  # noqa: E402
+from agentfile_lint.cli import main  # noqa: E402
 
 sys.exit(main())

@@ -5,7 +5,7 @@ import helpers
 
 SHA_A = "a" * 40
 SHA_B = "b" * 40
-URL = "https://github.com/example/instruction-lint"
+URL = "https://github.com/example/agentfile-lint"
 
 PRECOMMIT = f"""repos:
   - repo: https://github.com/example/other-hook
@@ -15,19 +15,19 @@ PRECOMMIT = f"""repos:
   - repo: {URL}
     rev: {{rev}}  # v0.2.0
     hooks:
-      - id: instruction-lint
+      - id: agentfile-lint
         pass_filenames: false
 """
 LEFTHOOK = f"""pre-commit:
   commands:
-    instruction-lint:
-      run: uvx --from git+{URL}@{{sha}} instruction-lint
+    agentfile-lint:
+      run: uvx --from git+{URL}@{{sha}} agentfile-lint
 """
 WORKFLOW = """jobs:
   lint:
     steps:
       - uses: actions/checkout@{c}
-      - uses: example/instruction-lint@{sha} # v0.2.0
+      - uses: example/agentfile-lint@{sha} # v0.2.0
 """
 
 
@@ -45,7 +45,7 @@ class CheckPinsTest(unittest.TestCase):
         }
         rc, out, err = check(files)
         self.assertEqual((rc, err), (0, ""))
-        self.assertIn(f"3 reference(s) to 'instruction-lint', all pinned to {SHA_A}", out)
+        self.assertIn(f"3 reference(s) to 'agentfile-lint', all pinned to {SHA_A}", out)
 
     def test_two_different_shas_fail_with_file_and_line(self):
         files = {
@@ -73,18 +73,18 @@ class CheckPinsTest(unittest.TestCase):
         rc, _, err = check({".pre-commit-config.yaml": f"repos:\n  - repo: {URL}\n    hooks: []\n"})
         self.assertEqual(rc, 1)
         self.assertIn("pinned to '(none)'", err)
-        rc, _, err = check({"lefthook.yml": f"run: uvx --from git+{URL} instruction-lint\n"})
+        rc, _, err = check({"lefthook.yml": f"run: uvx --from git+{URL} agentfile-lint\n"})
         self.assertEqual(rc, 1)
 
     def test_plain_mentions_are_not_references(self):
-        files = {"lefthook.yml": "pre-commit:\n  commands:\n    instruction-lint:\n      run: instruction-lint\n"}
+        files = {"lefthook.yml": "pre-commit:\n  commands:\n    agentfile-lint:\n      run: agentfile-lint\n"}
         rc, out, err = check(files)
         self.assertEqual((rc, err), (0, ""))
         self.assertIn("no reference", out)
         self.assertEqual(check(files, "--require-refs")[0], 1)
 
     def test_repo_string_is_configurable(self):
-        files = {".pre-commit-config.yaml": PRECOMMIT.format(rev=SHA_A).replace("example/instruction-lint", "acme/linter")}
+        files = {".pre-commit-config.yaml": PRECOMMIT.format(rev=SHA_A).replace("example/agentfile-lint", "acme/linter")}
         self.assertIn("no reference", check(files)[1])
         rc, out, _ = check(files, "--repo", "acme/linter")
         self.assertEqual(rc, 0)
@@ -92,7 +92,7 @@ class CheckPinsTest(unittest.TestCase):
 
     def test_repo_string_and_files_come_from_the_config(self):
         files = {
-            ".instruction-lint.toml": '[check_pins]\nrepo = "acme/linter"\nfiles = ["tools/*.yml"]\n',
+            ".agentfile-lint.toml": '[check_pins]\nrepo = "acme/linter"\nfiles = ["tools/*.yml"]\n',
             "tools/hooks.yml": f"run: uvx --from git+https://host/acme/linter@{SHA_A} x\n",
             "lefthook.yml": f"run: uvx --from git+https://host/acme/linter@{SHA_B} x\n",
         }
@@ -130,7 +130,7 @@ class ConfigJsonTest(unittest.TestCase):
     def test_reflects_the_repo_config_merge(self):
         toml = ('[rules.R2]\nlevel = "error"\n[[rules.R2.shapes]]\nglob = "m/*/AGENTS.md"\nsections = ["A", "B"]\n'
                 '[[allowlist.entries]]\nrule = "R1"\npath = "AGENTS.md"\nreason = "r"\nexpires = 2026-07-01\n')
-        r = self.run_config({"AGENTS.md": "x\n", ".instruction-lint.toml": toml})
+        r = self.run_config({"AGENTS.md": "x\n", ".agentfile-lint.toml": toml})
         self.assertEqual(r.returncode, 0, r.stderr)
         data = json.loads(r.stdout)
         self.assertEqual(data["rules"]["R2"]["level"], "error")
@@ -139,7 +139,7 @@ class ConfigJsonTest(unittest.TestCase):
         self.assertEqual(data["allowlist"]["entries"][0]["expires"], "2026-07-01")
 
     def test_invalid_config_exits_2(self):
-        r = self.run_config({"AGENTS.md": "x\n", ".instruction-lint.toml": "bogus = 1\n"})
+        r = self.run_config({"AGENTS.md": "x\n", ".agentfile-lint.toml": "bogus = 1\n"})
         self.assertEqual(r.returncode, 2)
         self.assertEqual(r.stdout, "")
 
