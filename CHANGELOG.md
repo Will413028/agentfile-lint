@@ -15,6 +15,8 @@ versions follow [Semantic Versioning](https://semver.org/).
 - `rubric.md`: J4 says `R6` finds numeric candidates only, so copied lists of names need a reviewer.
 - `rubric.md`: the linter runs before the read-through; J2 notes that agents differ in when they load
   a subdirectory's file and that R5 skips lines shorter than `min_chars`.
+- `rubric.md`: R5 is described as comparing normalized lines and skipping headings; R6 lists constant
+  names only when a number follows them.
 
 ## [0.3.0] - 2026-10-31
 

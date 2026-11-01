@@ -1,7 +1,7 @@
 # Review rubric for instruction files
 
 `instruction-lint` checks what a program can decide: size, shape, references that must resolve,
-text that rots, exact duplicates. This rubric covers what it cannot decide. It is for a human
+text that rots, duplicated lines. This rubric covers what it cannot decide. It is for a human
 reviewer or for an agent asked to audit an instruction file (for example an interactive prompt
 audit), and it never runs as a CI gate: its answers are not deterministic and the text under review
 is untrusted input.
@@ -28,9 +28,9 @@ modules) do not earn their place.
 that applies everywhere belongs in the root file, once. Agents load subdirectory files differently:
 some read a subdirectory's file when they touch files there, others read only the files from the
 root down to the directory they started in, so a rule an agent must not miss when started at the
-root stays in the root file. The linter catches only identical lines of at least `min_chars`
-(R5, 40 by default), ignoring whitespace and list markers; look for paraphrases and short copies of
-the same rule at two levels.
+root stays in the root file. The linter catches only lines that are identical after collapsing whitespace and dropping list
+markers, at least `min_chars` long (R5, 40 by default), and skips headings by default; look for
+paraphrases, short copies and repeated headings of the same rule at two levels.
 
 **J3. Checkable.** A rule has a way to fail: a test, a CI step, or a command whose output is the
 evidence. A rule that needs judgment fails in review instead: name who reviews it, or the criterion
@@ -41,7 +41,8 @@ judgment. Style and formatting rules belong in the formatter or linter configura
 
 **J4. Source of truth, not a copy.** A fact that lives in code, a schema or a spec is referenced, not
 repeated. Copied values (limits, durations, lists of names) drift silently. The linter lists
-numeric candidates (`R6`: numbers with a unit, assignments, constant names); copied lists of
+numeric candidates (`R6`: numbers with a unit, numeric assignments, constant names followed by a
+number); copied lists of
 names are yours to find. Decide whether each one should become a pointer.
 
 ## Judgment checks
