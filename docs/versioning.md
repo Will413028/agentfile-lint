@@ -27,12 +27,18 @@ the release that ships it (`Added`, `Changed`, `Fixed`, `Removed`).
   changelog section disagree.
 - Changing a default value changes every consumer that did not override it: say so under `Changed`.
 
-## Releasing
+## Branches and releasing
 
-1. Move the `Unreleased` entries under `## [x.y.z] - YYYY-MM-DD`, update the version in
-   `pyproject.toml` and `agentfile_lint/__init__.py`.
-2. `make check` on the supported Python versions; CI green.
-3. Tag `vx.y.z` (annotated, signed) on that commit and note the full commit SHA for consumers.
+Work lands on `dev` (pushed directly; CI runs on every push). `main` holds released code only and
+changes through a pull request from `dev` with all required checks green. Merge `dev` into `main`
+with a merge commit, never squash or rebase: a squashed `main` no longer contains the `dev` commits,
+and the next release pull request conflicts with itself.
+
+1. On `dev`: move the `Unreleased` entries under `## [x.y.z] - YYYY-MM-DD`, update the version in
+   `pyproject.toml` and `agentfile_lint/__init__.py`; `make check`; push and wait for CI.
+2. Open a pull request `dev` -> `main` and merge it with a merge commit once checks are green.
+3. Tag `vx.y.z` (annotated, signed) on the merge commit on `main` and note the full commit SHA for
+   consumers.
 4. Publish a GitHub release for the tag (notes from the changelog section). `publish.yml` then
    builds the sdist and wheel from the tag and uploads them to PyPI with Trusted Publishing (no stored
    token). PyPI holds the name and offers an install path; consumers still pin the full commit SHA.
