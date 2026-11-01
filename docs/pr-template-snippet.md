@@ -9,7 +9,7 @@ the reviewer reads it. Nothing here runs in CI.
 
 - [ ] This pull request does not change `AGENTS.md` / `CLAUDE.md` files (skip the rest), or:
 - [ ] `instruction-lint` passes locally and in CI
-- [ ] Reviewed against the rubric (J1-J4, R7-R9) and the summary is pasted below
+- [ ] Reviewed against the rubric (J1-J7) and the summary is pasted below
 
 <!-- Summary of the review (findings, or "no findings"). Rubric:
      https://github.com/Will413028/instruction-lint/blob/<tag or sha>/rubric.md -->

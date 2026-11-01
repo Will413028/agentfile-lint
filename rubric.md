@@ -29,7 +29,7 @@ that applies everywhere belongs in the root file, once. The linter catches ident
 look for paraphrases of the same rule at two levels.
 
 **J3. Checkable.** A rule has a way to fail: a test, a CI step, a command whose output is the
-evidence, or a named owner. A rule that nothing can contradict is a wish. Prefer pointing at the guard
+evidence, or a named owner. A rule that nothing can contradict is a wish; for a rule that needs judgment, the way to fail is a named reviewer or a criterion in this rubric. Prefer pointing at the guard
 by name over describing the behaviour again. A rule with no exceptions belongs in the guard itself (a
 hook, a CI step, a test), with the file pointing to it; the file keeps the rules that need judgment.
 Style and formatting rules belong in the formatter or linter configuration, not in prose.
@@ -40,14 +40,16 @@ candidates (`R6`); decide whether each one should become a pointer.
 
 ## Judgment checks
 
-**R7. Contradiction.** Do two instructions, in the same file or in a file and its ancestors, ask for
+These are numbered J, not R, so they are never mistaken for a rule the linter runs.
+
+**J5. Contradiction.** Do two instructions, in the same file or in a file and its ancestors, ask for
 incompatible things? Does the new text conflict with a rule that is only implied elsewhere?
 
-**R8. Stale or misleading claim.** Does the text assert something that is no longer true (a removed
+**J6. Stale or misleading claim.** Does the text assert something that is no longer true (a removed
 command, a renamed module, a behaviour that changed)? Reference checks catch missing paths and test
 names; they do not catch a sentence that is wrong while every name in it still exists.
 
-**R9. Ambiguity.** Could two careful readers act differently on this line? Look for unscoped
+**J7. Ambiguity.** Could two careful readers act differently on this line? Look for unscoped
 words ("always", "never" with no condition), unstated exceptions, imperatives with no object, and
 terms used with two meanings.
 
@@ -56,7 +58,7 @@ terms used with two meanings.
 ```
 instruction-file review: <path or PR>
 J1 ok | J2 ok | J3 <finding> | J4 ok
-R7 ok | R8 <finding> | R9 ok
+J5 ok | J6 <finding> | J7 ok
 Findings:
 - <file>:<line>: <criterion>: <what is wrong>; <suggested fix>
 ```

@@ -10,6 +10,8 @@ versions follow [Semantic Versioning](https://semver.org/).
 - `rubric.md`: J1 also asks whether a line is needed before acting and drops enumerations that `ls` or a
   search already shows; J3 sends rules with no exceptions to their guard and style rules to the
   formatter or linter.
+- `rubric.md`: the judgment checks R7-R9 are renamed J5-J7 so they cannot be mistaken for linter rule
+  IDs; J3 states how a judgment rule can fail. The pull request snippet follows (J1-J7).
 
 ## [0.3.0] - 2026-10-31
 
