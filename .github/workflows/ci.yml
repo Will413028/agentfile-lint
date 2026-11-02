@@ -100,3 +100,20 @@ jobs:
           python-version: '3.12'
       - run: pipx run actionlint-py==1.7.12.25
       - run: pipx run zizmor==1.31.1 --min-severity low .github/workflows/
+
+  gate:
+    # The only required check on main: it passes when every other job in this workflow succeeded or was skipped.
+    name: gate (ci)
+    if: always()
+    needs: [test, self-check, timing, reproducible, contract, vendor, workflow-lint]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Every job succeeded or was skipped
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          for r in $RESULTS; do
+            case "$r" in success|skipped) ;; *) echo "a needed job ended with: $r"; exit 1 ;; esac
+          done
