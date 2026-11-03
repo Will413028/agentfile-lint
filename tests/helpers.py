@@ -13,14 +13,19 @@ LEGACY = FIXTURES / "legacy-oracle" / "check-agents-md.py"
 HAWKR_LIMITS = FIXTURES / "hawkr-limits.toml"
 
 
-def make_repo(files: dict[str, str | bytes], track: bool = True) -> Path:
-    """Create a temp git repo. Files are written byte-exact; `track` runs `git add -A`."""
+def make_repo(files: dict[str, str | bytes], track: bool = True, symlinks: dict[str, str] | None = None) -> Path:
+    """Create a temp git repo. Files are written byte-exact; `symlinks` maps a link path to its
+    target (as written into the link); `track` runs `git add -A`."""
     root = Path(tempfile.mkdtemp(prefix="il-test-"))
     subprocess.run(["git", "init", "-q", str(root)], check=True)
     for name, content in files.items():
         path = root / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(content if isinstance(content, bytes) else content.encode("utf-8"))
+    for name, target in (symlinks or {}).items():
+        path = root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.symlink_to(target)
     if track:
         subprocess.run(["git", "-C", str(root), "add", "-A"], check=True)
     return root
