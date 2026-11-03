@@ -231,6 +231,65 @@ class PathLimitsTest(unittest.TestCase):
         self.assertIn("pkg/AGENTS.md: error: R1: file and its ancestors (AGENTS.md) total 35000 bytes, limit 32768", r.stdout)
 
 
+BLOCK = 'excluded_blocks = [{ begin = "<!-- B -->", end = "<!-- E -->" }]\n'
+
+
+def r1(extra=""):
+    return '[rules.R1]\nlevel = "error"\n' + BLOCK + extra
+
+
+def wc_c(root, path):
+    return (root / path).stat().st_size
+
+
+class RawBytesTest(unittest.TestCase):
+    """docs/adr/0004: single-file bytes and line numbers are those on disk; excluded blocks still drop out."""
+
+    def run_files(self, files, toml):
+        root = helpers.make_repo({**files, CFG: toml})
+        return root, helpers.run_new(root)
+
+    def test_crlf_bytes_equal_wc_c(self):
+        data = b"ab\r\n" * 10  # 40 bytes on disk, 30 in text mode
+        root, r = self.run_files({"AGENTS.md": data}, r1() + limits({"glob": "AGENTS.md", "max_bytes": 39}))
+        self.assertIn(f"AGENTS.md: error: R1: file is {wc_c(root, 'AGENTS.md')} bytes, limit 39", r.stdout)
+        self.assertEqual(wc_c(root, "AGENTS.md"), 40)
+
+    def test_crlf_block_removes_its_raw_bytes(self):
+        blk = b"<!-- B -->\r\nzzzz\r\n<!-- E -->\r\n"
+        data = b"ab\r\n" + blk + b"cd\r\n"
+        root, r = self.run_files({"AGENTS.md": data}, r1() + limits({"glob": "AGENTS.md", "max_bytes": 1}))
+        self.assertIn(f"file is {wc_c(root, 'AGENTS.md') - len(blk)} bytes", r.stdout)
+        self.assertIn("file is 8 bytes", r.stdout)
+
+    def test_line_after_block_uses_disk_line_number(self):
+        text = "one\n<!-- B -->\na\n<!-- E -->\n" + "w" * 11 + "\n"
+        _, r = self.run_files({"AGENTS.md": text}, r1("max_line_chars = 10\n"))
+        self.assertEqual(text.split("\n").index("w" * 11) + 1, 5)  # what `grep -n` reports
+        self.assertIn("AGENTS.md:5: error: R1: line is 11 characters, limit 10", r.stdout)
+
+    def test_only_line_endings_split_lines(self):
+        text = "a\x0cb\u2028c\n" + "w" * 11 + "\n"  # form feed and U+2028 are characters, not line breaks
+        _, r = self.run_files({"AGENTS.md": text}, r1("max_line_chars = 10\n"))
+        self.assertEqual(r.stdout.count(": R1:"), 1, r.stdout)
+        self.assertIn("AGENTS.md:2: error: R1: line is 11 characters", r.stdout)
+
+    def test_lone_cr_after_block_end_is_removed(self):
+        data = b"ab\r<!-- B -->\rzz\r<!-- E -->\rcd\r"
+        _, r = self.run_files({"AGENTS.md": data}, r1() + limits({"glob": "AGENTS.md", "max_bytes": 1}))
+        self.assertIn("file is 6 bytes", r.stdout)
+
+    def test_long_line_inside_block_not_reported(self):
+        text = "one\n<!-- B -->\n" + "w" * 50 + "\n<!-- E -->\r\nok\n"
+        _, r = self.run_files({"AGENTS.md": text}, r1("max_line_chars = 10\n"))
+        self.assertEqual(r.returncode, 0, r.stdout)
+
+    def test_lines_still_exclude_the_block(self):
+        text = "a\r\n<!-- B -->\r\nx\r\n<!-- E -->\r\nb\r\n"
+        _, r = self.run_files({"AGENTS.md": text.encode()}, r1() + limits({"glob": "AGENTS.md", "max_lines": 1}))
+        self.assertIn("file is 2 lines, limit 1", r.stdout)
+
+
 def _preset_r1():
     from importlib import resources
     import tomllib

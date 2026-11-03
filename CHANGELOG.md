@@ -14,6 +14,11 @@ versions follow [Semantic Versioning](https://semver.org/).
   line shapes; `--format json` is meant for programs (docs/adr/0004).
 - The pseudo rule `input` (an instruction file that is not valid UTF-8) is now `E0`. An allowlist entry
   may name it; `[rules]` cannot turn it off. `--list-rules` lists it.
+- R1 single-file limits count the bytes on disk: a CRLF is two bytes (it was one), the unit
+  `path_limits` already used, so a Windows-line-ending file under a `limits` `max_bytes` may now
+  exceed it. `excluded_blocks` still drop out, with their raw bytes and a trailing LF or CRLF. A long
+  line after an excluded block reports its line number on disk; it used to subtract the block's lines
+  (docs/adr/0004).
 - The GitHub Action runs with `--format github`, so findings appear as annotations; its inputs do not
   change.
 

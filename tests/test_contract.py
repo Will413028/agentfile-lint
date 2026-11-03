@@ -1,8 +1,10 @@
-"""Contract: the new R1 must be semantically equal to the legacy checker snapshot.
+"""Contract: the new R1 against the legacy checker snapshot, with a list of deliberate differences.
 
 Both tools run on the same synthetic git repos. Their outputs are normalised to sets of
 (path, line or 0, kind size|line, measured, limit) and compared, together with exit codes.
-Normalisation is deliberately dumb; if the sets differ, one of the two tools is wrong. The legacy
+Outside DIFFERENCES the sets must be equal; normalisation is deliberately dumb, so a mismatch means
+one of the two tools is wrong. Each DIFFERENCES row pins both tools' exact sets and says why the new
+one deliberately differs (docs/adr/0004: single-file bytes are the raw bytes on disk). The legacy
 checker prints to stderr; the new one prints every finding to stdout as
 `file:line: severity: rule-id: message` (`file: severity: ...` for a whole-file finding).
 """
@@ -106,12 +108,8 @@ SCENARIOS = {
     ),
     "oversized outside block counted": (
         {"AGENTS.md": block("small") + exact(ROOT + 1),
-         "sub/AGENTS.md": block("small") + "q" * 501 + "\n"},
+         "sub/AGENTS.md": "q" * 501 + "\n" + block("small")},
         2,
-    ),
-    "line numbers count after block removal": (
-        {"sub/AGENTS.md": "one\n" + block("a\nb\nc") + "three\n" + "w" * 501 + "\n"},
-        1,
     ),
     "size counted after block removal": (
         {"AGENTS.md": exact(ROOT - 10) + block("k" * 5000)},
@@ -119,6 +117,26 @@ SCENARIOS = {
     ),
     "crlf line endings": ({"AGENTS.md": b"a\r\n" + b"b" * 501 + b"\r\n"}, 1),
     "non-agents files ignored": ({"README.md": "x" * 20_000, "NOTES.local.md": "x" * 20_000}, 0),
+}
+
+
+CRLF_OVER = b"x" * 78 + b"\r\n"  # 80 bytes on disk, 79 after text-mode translation
+
+DIFFERENCES = {
+    # name: (files, legacy set, new set, reason)
+    "crlf counted as two bytes": (
+        # 151 lines: 11,929 bytes in text mode (under 12,000), 12,080 on disk (over).
+        {"AGENTS.md": CRLF_OVER * 151},
+        set(),
+        {("AGENTS.md", 0, "size", 80 * 151, ROOT)},
+        "single-file bytes are the bytes on disk; each CRLF line adds one byte over text mode (151 lines)",
+    ),
+    "line numbers are the lines on disk after a block": (
+        {"sub/AGENTS.md": "one\n" + block("a\nb\nc") + "three\n" + "w" * 501 + "\n"},
+        {("sub/AGENTS.md", 3, "line", 501, LINE)},
+        {("sub/AGENTS.md", 8, "line", 501, LINE)},
+        "a finding's line is where an annotation points; the block's 5 lines are no longer subtracted",
+    ),
 }
 
 
@@ -135,6 +153,17 @@ class ContractTest(unittest.TestCase):
                 self.assertEqual(old_set, new_set, f"\nlegacy:\n{old.stderr}\nnew:\n{new.stdout}")
                 self.assertEqual(old.returncode, new.returncode)
                 self.assertEqual(new.returncode, 1 if expected else 0)
+
+    def test_deliberate_differences(self):
+        for name, (files, legacy, expected, _reason) in DIFFERENCES.items():
+            with self.subTest(name):
+                root = helpers.make_repo(files)
+                old = helpers.run_legacy(root)
+                new = helpers.run_new(root, "--config", str(helpers.HAWKR_LIMITS))
+                old_set, new_set = normalise_legacy(old.stderr), normalise_new(new.stdout)
+                self.assertEqual(old_set, legacy, f"legacy changed\n{old.stderr}")
+                self.assertEqual(new_set, expected, f"\nnew:\n{new.stdout}")
+                self.assertNotEqual(old_set, new_set, "not a difference any more: move it to SCENARIOS")
 
 
 if __name__ == "__main__":

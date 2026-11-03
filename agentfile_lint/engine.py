@@ -29,7 +29,7 @@ def analyze(root: Path, config: Config, today: datetime.date, warn_as_error: boo
     texts: dict[str, str] = {}
     for path in paths:
         try:
-            texts[path] = (root / path).read_text(encoding="utf-8")  # text mode, like the legacy checker
+            texts[path] = (root / path).read_text(encoding="utf-8")  # text mode; R1 rereads the raw bytes (docs/adr/0004)
         except UnicodeDecodeError:
             findings.append(Finding(path, 0, INPUT_RULE, "file is not valid UTF-8"))
     ctx = Context(root, discover.tracked_files(root), texts)

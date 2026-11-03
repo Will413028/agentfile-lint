@@ -89,11 +89,16 @@ expiry warnings appear without commits.
 - Per-line limit in characters (`max_line_chars`), optional; omitted (the default), it is not checked.
   A merged config cannot remove a key, so once a parent config sets it, a child can only raise it.
 - `excluded_blocks`: marker pairs; the text from a begin marker through the end marker (and one
-  trailing newline) is removed before measuring.
-- Exact semantics: files are read as UTF-8 in text mode (CRLF becomes LF); bytes and lines are counted on
-  the body after block removal; line length is in characters; a limit is exceeded when
-  `measured > limit` (equal passes); line numbers count on the body after block removal.
-  These match the checker this rule replaces; a contract test compares both on boundary fixtures.
+  trailing LF or CRLF) does not count toward any single-file check: `limits` bytes and lines, and
+  `max_line_chars` (a line wholly inside a block is never reported). It does not apply to `path_limits`.
+  The split is deliberate: a single-file limit is the author's budget, and a block a tool writes into
+  the file is not the author's; `path_limits` model what the agent actually reads, block included.
+- Exact semantics: files are read as UTF-8 without newline translation, so bytes are the bytes on disk
+  (a CRLF counts two) minus the blocks' raw bytes, the same unit `path_limits` uses; lines are counted
+  on the text outside the blocks; line length is in characters; a limit is exceeded when
+  `measured > limit` (equal passes); a finding's line number is the line on disk, where an annotation
+  points. A contract test compares R1 with the checker it replaced and lists the deliberate differences
+  (CRLF bytes, line numbers after a block; docs/adr/0004).
 
 ## Rules R2 to R6 and C1
 
