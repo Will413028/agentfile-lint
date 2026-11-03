@@ -16,7 +16,7 @@ class SelfCheckTest(unittest.TestCase):
         r = helpers.run_new(root, "--warn-as-error")
         self.assertEqual((r.returncode, r.stdout, r.stderr), (0, "", ""))
         # ...and the same copy fails when it is made too large (the check is really running).
-        big = helpers.make_repo({"AGENTS.md": text + "x\n" * 7000})
+        big = helpers.make_repo({"AGENTS.md": text + "x\n" * 17000})  # past the 32 KiB error limit
         self.assertEqual(helpers.run_new(big).returncode, 1)
 
     def test_version_guard_message(self):

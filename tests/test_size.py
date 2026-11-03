@@ -76,15 +76,90 @@ class SizeLimitsTest(unittest.TestCase):
     def test_preset_values(self):
         entries = _preset_limits()
         self.assertEqual(
-            [(e["glob"], e["max_bytes"], e["max_lines"]) for e in entries],
-            [("AGENTS.md", 12000, 200), ("CLAUDE.md", 12000, 200), ("**/AGENTS.md", 6000, 200), ("**/CLAUDE.md", 6000, 200)],
+            entries,
+            [
+                {"glob": "**/AGENTS.md", "max_bytes": 32768, "max_lines": 200, "lines_level": "warn"},
+                {"glob": "**/CLAUDE.md", "max_lines": 200, "lines_level": "warn"},
+            ],
         )
 
     def test_default_preset_covers_every_discovered_file(self):
-        files = {"AGENTS.md": "x\n" * 201, "sub/CLAUDE.md": "x\n" * 201, "a/b/AGENTS.md": "x\n" * 201}
-        err = helpers.run_new(helpers.make_repo(files)).stderr
+        files = {"AGENTS.md": "x\n" * 201, "CLAUDE.md": "x\n" * 201, "sub/CLAUDE.md": "x\n" * 201, "a/b/AGENTS.md": "x\n" * 201}
+        r = helpers.run_new(helpers.make_repo(files))
+        self.assertEqual((r.returncode, r.stderr), (0, ""))  # 200 lines is guidance, not a hard limit: warn
         for p in files:
-            self.assertIn(f"{p}:0: R1: file is 201 lines, limit 200", err)
+            self.assertIn(f"{p}:0: R1: file is 201 lines, limit 200", r.stdout)
+
+
+class LimitLevelsTest(unittest.TestCase):
+    """`bytes_level` / `lines_level` per limits entry, capped by the rule level; optional `max_line_chars`."""
+
+    def test_lines_level_warn_reports_on_stdout_and_exits_0(self):
+        toml = limits({"glob": "AGENTS.md", "max_lines": 2, "lines_level": "warn"})
+        r = run({"AGENTS.md": "a\nb\nc\n"}, toml)
+        self.assertEqual((r.returncode, r.stderr), (0, ""))
+        self.assertIn("AGENTS.md:0: R1: file is 3 lines, limit 2", r.stdout)
+
+    def test_levels_are_per_measure(self):
+        toml = limits({"glob": "AGENTS.md", "max_bytes": 5, "max_lines": 1, "lines_level": "warn"})
+        r = run({"AGENTS.md": "aaaa\nbbbb\n"}, toml)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("file is 10 bytes, limit 5", r.stderr)
+        self.assertIn("file is 2 lines, limit 1", r.stdout)
+        self.assertNotIn("lines", r.stderr)
+
+    def test_bytes_level_warn(self):
+        toml = limits({"glob": "AGENTS.md", "max_bytes": 5, "bytes_level": "warn"})
+        r = run({"AGENTS.md": "aaaa\nbbbb\n"}, toml)
+        self.assertEqual((r.returncode, r.stderr), (0, ""))
+        self.assertIn("file is 10 bytes, limit 5", r.stdout)
+
+    def test_off_skips_that_measure(self):
+        toml = limits({"glob": "AGENTS.md", "max_bytes": 5, "max_lines": 1, "bytes_level": "off", "lines_level": "off"})
+        r = run({"AGENTS.md": "aaaa\nbbbb\n"}, toml)
+        self.assertEqual((r.returncode, r.stdout, r.stderr), (0, "", ""))
+
+    def test_entry_level_never_exceeds_rule_level(self):
+        toml = "[rules.R1]\nlevel = 'warn'\n" + limits({"glob": "AGENTS.md", "max_bytes": 5, "bytes_level": "error"})
+        r = run({"AGENTS.md": "aaaa\nbbbb\n"}, toml)
+        self.assertEqual((r.returncode, r.stderr), (0, ""))
+        self.assertIn("file is 10 bytes, limit 5", r.stdout)
+
+    def test_omitted_entry_level_follows_rule_level(self):
+        toml = limits({"glob": "AGENTS.md", "max_lines": 1})
+        self.assertIn("file is 2 lines, limit 1", run({"AGENTS.md": "a\nb\n"}, toml).stderr)
+
+    def test_bad_entry_level_fails(self):
+        for key in ("bytes_level", "lines_level"):
+            r = run({"AGENTS.md": "ok\n"}, limits({"glob": "AGENTS.md", "max_bytes": 5, key: "fatal"}))
+            self.assertEqual(r.returncode, 2, key)
+            self.assertIn(f"rules.R1.limits[0].{key}", r.stderr)
+
+    def test_omitted_max_line_chars_checks_no_line_length(self):
+        r = run({"AGENTS.md": "y" * 5000 + "\n"}, "")
+        self.assertEqual((r.returncode, r.stdout, r.stderr), (0, "", ""))
+
+    def test_max_line_chars_still_works_when_set(self):
+        r = run({"AGENTS.md": "y" * 600 + "\n"}, "[rules.R1]\nmax_line_chars = 500\n")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("AGENTS.md:1: R1: line is 600 characters, limit 500", r.stderr)
+
+
+class DefaultLimitsTest(unittest.TestCase):
+    """The default preset uses only limits with an external source (Codex 32 KiB, Claude Code 200 lines)."""
+
+    def test_agents_md_over_32_kib_is_an_error_at_any_depth(self):
+        big = "x" * 99 + "\n"
+        for path in ("AGENTS.md", "a/b/AGENTS.md"):
+            r = helpers.run_new(helpers.make_repo({path: big * 328}))  # 32800 bytes
+            self.assertEqual(r.returncode, 1, path)
+            self.assertIn(f"{path}:0: R1: file is 32800 bytes, limit 32768", r.stderr)
+        self.assertEqual(helpers.run_new(helpers.make_repo({"AGENTS.md": "x" * 32767 + "\n"})).returncode, 0)
+
+    def test_claude_md_has_no_byte_limit(self):
+        r = helpers.run_new(helpers.make_repo({"CLAUDE.md": ("x" * 99 + "\n") * 199 + "y" * 40000 + "\n"}))
+        self.assertEqual(r.returncode, 0)
+        self.assertNotIn(": R1:", r.stdout + r.stderr)  # neither a byte limit nor a line-length limit
 
 
 def _preset_limits():

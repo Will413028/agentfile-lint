@@ -6,16 +6,17 @@ from agentfile_lint import discover
 
 GLOBS = ["AGENTS.md", "**/AGENTS.md", "CLAUDE.md", "**/CLAUDE.md"]
 BIG = "x" * 600 + "\n"
+R1_LINE = {".agentfile-lint.toml": "[rules.R1]\nmax_line_chars = 500\n"}  # BIG violates it, if analyzed
 
 
 class DiscoverTest(unittest.TestCase):
     def test_ignores_local_md_files_even_when_tracked(self):
-        root = helpers.make_repo({"AGENTS.md": "ok\n", "NOTES.local.md": BIG, "sub/CLAUDE.local.md": BIG})
+        root = helpers.make_repo({"AGENTS.md": "ok\n", "NOTES.local.md": BIG, "sub/CLAUDE.local.md": BIG, **R1_LINE})
         self.assertEqual(discover.instruction_files(root, GLOBS), ["AGENTS.md"])
         self.assertEqual(helpers.run_new(root).returncode, 0)
 
     def test_ignores_untracked_files(self):
-        root = helpers.make_repo({"AGENTS.md": "ok\n"})
+        root = helpers.make_repo({"AGENTS.md": "ok\n", **R1_LINE})
         (root / "sub").mkdir()
         (root / "sub" / "AGENTS.md").write_text(BIG)  # not added to git
         self.assertEqual(discover.instruction_files(root, GLOBS), ["AGENTS.md"])
@@ -43,7 +44,7 @@ class DiscoverTest(unittest.TestCase):
 
     def test_argv_names_only_decide_whether_to_run(self):
         # sub/AGENTS.md violates; passing only the clean root file still analyzes the full set.
-        root = helpers.make_repo({"AGENTS.md": "ok\n", "sub/AGENTS.md": BIG, "README.md": "r\n"})
+        root = helpers.make_repo({"AGENTS.md": "ok\n", "sub/AGENTS.md": BIG, "README.md": "r\n", **R1_LINE})
         r = helpers.run_new(root, "AGENTS.md")
         self.assertEqual(r.returncode, 1)
         self.assertIn("sub/AGENTS.md:1: R1", r.stderr)

@@ -6,7 +6,8 @@ from agentfile_lint import allowlist, config
 from agentfile_lint.errors import ConfigError
 
 TODAY = "2026-06-01"
-BIG = "x" * 600 + "\n"  # one line over the 500-char limit -> an R1 finding on line 1
+BIG = "x" * 600 + "\n"  # one line over the 500-char limit (R1_LINE) -> an R1 finding on line 1
+R1_LINE = "[rules.R1]\nmax_line_chars = 500\n"  # the default checks no line length
 
 
 def entry(path="AGENTS.md", expires="2026-06-30", rule="R1", reason="cleanup tracked elsewhere"):
@@ -14,7 +15,7 @@ def entry(path="AGENTS.md", expires="2026-06-30", rule="R1", reason="cleanup tra
 
 
 def run(files, toml, *extra):
-    root = helpers.make_repo({**files, ".agentfile-lint.toml": toml})
+    root = helpers.make_repo({**files, ".agentfile-lint.toml": R1_LINE + toml})
     return helpers.run_new(root, "--today", TODAY, *extra)
 
 

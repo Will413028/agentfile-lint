@@ -1,16 +1,21 @@
-"""R1: size limits. Byte and line limits chosen by path glob (first match wins) and a character limit per line."""
+"""R1: size limits. Byte and line limits chosen by path glob (first match wins) and an optional
+character limit per line.
+
+Each `limits` entry may give its byte and line limits their own level (`bytes_level`, `lines_level`);
+an omitted level follows the rule level, and no entry level can raise a finding above the rule level.
+"""
 from __future__ import annotations
 
 import re
 from typing import Any
 
 from ..discover import glob_to_regex
-from ..errors import ConfigError, check_keys, expect_int, expect_str, expect_table_list, require_keys
+from ..errors import ConfigError, check_keys, expect_int, expect_level, expect_str, expect_table_list, require_keys
 from ..finding import Finding
 
 ID = "R1"
 NAME = "size"
-DESCRIPTION = "byte and line limits per path glob and character limit per line"
+DESCRIPTION = "byte and line limits per path glob, optional character limit per line"
 
 _MIGRATION = (
     "rules.R1.max_bytes (root/subproject/nested) was removed in 0.3.0; replace it with "
@@ -24,13 +29,14 @@ def validate(params: dict[str, Any]) -> dict[str, Any]:
     if "max_bytes" in params:
         raise ConfigError(f"{where}: {_MIGRATION}")
     check_keys(params, {"level", "max_line_chars", "limits", "excluded_blocks"}, where)
-    for key in ("max_line_chars", "limits", "excluded_blocks"):
+    for key in ("limits", "excluded_blocks"):
         if key not in params:
             raise ConfigError(f"{where}: missing key {key}")
-    expect_int(params["max_line_chars"], f"{where}.max_line_chars")
+    if "max_line_chars" in params:  # omitted: line length is not checked
+        expect_int(params["max_line_chars"], f"{where}.max_line_chars")
     for i, raw in enumerate(expect_table_list(params["limits"], f"{where}.limits")):
         at = f"{where}.limits[{i}]"
-        check_keys(raw, {"glob", "max_bytes", "max_lines"}, at)
+        check_keys(raw, {"glob", "max_bytes", "max_lines", "bytes_level", "lines_level"}, at)
         require_keys(raw, ["glob"], at)
         expect_str(raw["glob"], f"{at}.glob")
         if "max_bytes" not in raw and "max_lines" not in raw:
@@ -38,6 +44,9 @@ def validate(params: dict[str, Any]) -> dict[str, Any]:
         for key in ("max_bytes", "max_lines"):
             if key in raw:
                 expect_int(raw[key], f"{at}.{key}")
+        for key in ("bytes_level", "lines_level"):
+            if key in raw:
+                expect_level(raw[key], f"{at}.{key}")
     blocks = params["excluded_blocks"]
     if not isinstance(blocks, list):
         raise ConfigError(f"{where}.excluded_blocks: expected a list of {{begin, end}} tables")
@@ -73,12 +82,16 @@ def check(path: str, text: str, params: dict[str, Any]) -> list[Finding]:
     found: list[Finding] = []
     size = len(body.encode("utf-8"))  # bytes after block removal
     limit = limit_for(path, params)
-    if "max_bytes" in limit and size > limit["max_bytes"]:
-        found.append(Finding(path, 0, ID, f"file is {size} bytes, limit {limit['max_bytes']}"))
+    bytes_level = limit.get("bytes_level", "error")  # "error" = follow the rule level (the engine caps it)
+    if "max_bytes" in limit and bytes_level != "off" and size > limit["max_bytes"]:
+        found.append(Finding(path, 0, ID, f"file is {size} bytes, limit {limit['max_bytes']}", level=bytes_level))
     lines = len(body.splitlines())
-    if "max_lines" in limit and lines > limit["max_lines"]:
-        found.append(Finding(path, 0, ID, f"file is {lines} lines, limit {limit['max_lines']}"))
-    max_chars = params["max_line_chars"]
+    lines_level = limit.get("lines_level", "error")
+    if "max_lines" in limit and lines_level != "off" and lines > limit["max_lines"]:
+        found.append(Finding(path, 0, ID, f"file is {lines} lines, limit {limit['max_lines']}", level=lines_level))
+    max_chars = params.get("max_line_chars")
+    if max_chars is None:
+        return found
     # Line numbers count on the body after block removal; length is in characters.
     for number, line in enumerate(body.splitlines(), start=1):
         if len(line) > max_chars:

@@ -11,10 +11,49 @@ versions follow [Semantic Versioning](https://semver.org/).
   needed" (exit code 1), because that path is analyzed under its target. Remove the entry, or move it to
   the target path if the target still violates the rule.
 
+### Added
+
+- R1 `limits` entries accept `bytes_level` and `lines_level` (`error`, `warn` or `off`) to give the byte
+  and the line limit of one entry their own level. Omitted, a limit follows the rule level, as before;
+  an entry level never raises a finding above the rule level.
+- R1 `max_line_chars` may be omitted; then line length is not checked. A config that sets it keeps the
+  old behavior.
+
 ### Changed
 
 - The GitHub Action (`action.yml`) sets up Python with `actions/setup-python` v7.0.0 instead of v5.6.0.
   Inputs are unchanged.
+- R1 default limits use only limits that an agent's documentation states. `**/AGENTS.md` over 32768
+  bytes is an error: Codex stops reading project docs at 32 KiB (`project_doc_max_bytes`). AGENTS.md
+  and CLAUDE.md over 200 lines are a warning: Claude Code asks for fewer than 200 lines per file and
+  reads AGENTS.md when there is no CLAUDE.md, but truncates nothing. The 12000/6000-byte limits and the
+  500-character line limit, which had no external source, are removed from the default. To keep the
+  0.4.0 limits, copy them into your config:
+
+  ```toml
+  [rules.R1]
+  max_line_chars = 500
+
+  [[rules.R1.limits]]
+  glob = "AGENTS.md"
+  max_bytes = 12000
+  max_lines = 200
+
+  [[rules.R1.limits]]
+  glob = "CLAUDE.md"
+  max_bytes = 12000
+  max_lines = 200
+
+  [[rules.R1.limits]]
+  glob = "**/AGENTS.md"
+  max_bytes = 6000
+  max_lines = 200
+
+  [[rules.R1.limits]]
+  glob = "**/CLAUDE.md"
+  max_bytes = 6000
+  max_lines = 200
+  ```
 
 ### Fixed
 

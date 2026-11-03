@@ -60,11 +60,11 @@ class ConfigTest(unittest.TestCase):
 
     def test_levels_warn_and_off(self):
         files = {"AGENTS.md": "y" * 600 + "\n"}
-        warn = helpers.make_repo({**files, ".agentfile-lint.toml": "[rules.R1]\nlevel = 'warn'\n"})
+        warn = helpers.make_repo({**files, ".agentfile-lint.toml": "[rules.R1]\nlevel = 'warn'\nmax_line_chars = 500\n"})
         r = helpers.run_new(warn)
         self.assertEqual((r.returncode, r.stderr), (0, ""))
         self.assertIn("AGENTS.md:1: R1: line is 600 characters, limit 500", r.stdout)
-        off = helpers.make_repo({**files, ".agentfile-lint.toml": "[rules.R1]\nlevel = 'off'\n"})
+        off = helpers.make_repo({**files, ".agentfile-lint.toml": "[rules.R1]\nlevel = 'off'\nmax_line_chars = 500\n"})
         r = helpers.run_new(off)
         self.assertEqual((r.returncode, r.stdout, r.stderr), (0, "", ""))
 
@@ -107,7 +107,8 @@ class ConfigTest(unittest.TestCase):
 
     def test_config_load_api(self):
         cfg = config.load(None, TODAY)
-        self.assertEqual(cfg.rules["R1"]["max_line_chars"], 500)
+        self.assertNotIn("max_line_chars", cfg.rules["R1"])  # omitted in the default: no line-length check
+        self.assertEqual(cfg.rules["R1"]["limits"][0]["max_bytes"], 32768)
 
 
 if __name__ == "__main__":

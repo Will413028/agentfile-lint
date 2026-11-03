@@ -11,32 +11,27 @@ warn_days = 14    # warn when an entry expires within this many days
 
 [rules.R1]
 level = "error"
-max_line_chars = 500
+# max_line_chars = 500  # optional: a character limit per line; omitted, line length is not checked
 excluded_blocks = []   # list of { begin = "...", end = "..." } marker pairs not counted
 
 # Size limits by path glob: the first matching entry applies; a file that matches no entry has no size
-# limit. Either or both of max_bytes and max_lines may be set. The line limit follows Claude Code's
-# guidance of fewer than 200 lines per CLAUDE.md file (https://code.claude.com/docs/en/memory).
+# limit. Either or both of max_bytes and max_lines may be set; `bytes_level` / `lines_level` set each
+# one's level (omitted: the rule level; never above it). The default uses only limits with an external
+# source: Codex reads at most 32 KiB of AGENTS.md (`project_doc_max_bytes`,
+# https://learn.chatgpt.com/docs/agent-configuration/agents-md), a hard limit, so an error; Claude Code asks for
+# fewer than 200 lines per CLAUDE.md file (https://code.claude.com/docs/en/memory) and reads AGENTS.md
+# when no CLAUDE.md exists, guidance that truncates nothing, so a warning.
 # A repository config that sets `limits` replaces this whole list.
 [[rules.R1.limits]]
-glob = "AGENTS.md"
-max_bytes = 12000
-max_lines = 200
-
-[[rules.R1.limits]]
-glob = "CLAUDE.md"
-max_bytes = 12000
-max_lines = 200
-
-[[rules.R1.limits]]
 glob = "**/AGENTS.md"
-max_bytes = 6000
+max_bytes = 32768
 max_lines = 200
+lines_level = "warn"
 
 [[rules.R1.limits]]
 glob = "**/CLAUDE.md"
-max_bytes = 6000
 max_lines = 200
+lines_level = "warn"
 
 # ---------------------------------------------------------------------------------------------
 # Rules added after R1 enter at `warn` (see CHANGELOG, "Graduated"). A repository raises a rule

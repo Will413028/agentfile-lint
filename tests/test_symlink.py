@@ -26,7 +26,7 @@ class SymlinkAliasTest(unittest.TestCase):
     def test_claude_md_symlink_to_agents_md_is_not_checked_again(self):
         _, lines = lint({"AGENTS.md": LONG}, {"CLAUDE.md": "AGENTS.md"}, '[rules.C1]\nlevel = "error"\n')
         self.assertEqual(on("CLAUDE.md", lines), [])                       # no R1, R5 or C1 on the alias
-        self.assertEqual(len([x for x in on("AGENTS.md", lines) if ": R1: " in x]), 2)  # target still checked once
+        self.assertEqual(len([x for x in on("AGENTS.md", lines) if ": R1: " in x]), 1)  # target still checked once (its line count)
 
     def test_nested_symlink_to_an_ancestor_file_is_checked_as_its_own_file(self):
         # An agent working in sub/ loads both files, so the repeated lines are real duplicates.
@@ -64,7 +64,7 @@ class SymlinkAliasTest(unittest.TestCase):
         outside = tmp / "shared.md"
         outside.write_text(LONG, encoding="utf-8")
         _, lines = lint({}, {"AGENTS.md": str(outside)})
-        self.assertEqual(len([x for x in on("AGENTS.md", lines) if ": R1: " in x]), 2)
+        self.assertEqual(len([x for x in on("AGENTS.md", lines) if ": R1: " in x]), 1)
 
     def test_dangling_symlink_is_skipped(self):
         rc, lines = lint({"AGENTS.md": "ok\n"}, {"CLAUDE.md": "missing.md"})
