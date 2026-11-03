@@ -11,7 +11,7 @@ own config once it is clean.
 
 | Rule | Default | `preset:strict` | What it checks |
 |---|---|---|---|
-| `R1` | error | error | byte and line limits chosen by path glob (first match wins), each with its own level, and an optional character limit per line; optional marker blocks (for example text a tool injects) are not counted. Default: `AGENTS.md` over 32 KiB is an error (Codex reads no more), `AGENTS.md` and `CLAUDE.md` over 200 lines a warning (Claude Code guidance) |
+| `R1` | error | error | byte and line limits chosen by path glob (first match wins), each with its own level, and an optional character limit per line; optional marker blocks (for example text a tool injects) are not counted. `path_limits` limit a file plus its ancestors' files (the set an agent loads). Default: AGENTS.md files on one path that total over 32 KiB are an error (Codex reads no more), `AGENTS.md` and `CLAUDE.md` over 200 lines a warning (Claude Code guidance) |
 | `R2` | warn | warn | file shape: required section headings in order, optional title, one-line purpose, bullet-only sections |
 | `R3a` | warn | warn | a test name in backticks is defined in a tracked test file |
 | `R3b` | off | warn | a path in backticks exists (resolved from the file, its ancestors, the root and configured bases; heuristic) |

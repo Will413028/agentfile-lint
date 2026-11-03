@@ -1,7 +1,7 @@
 # ADR 0003: The default preset runs only objective checks
 
-Status: accepted. Supersedes the default values in decision 1 of ADR 0002 and its rejection of the
-32 KiB limit; the `limits` model of ADR 0002 stands.
+Status: accepted. Supersedes the default values in decision 1 of ADR 0002 and its rejection of a
+combined 32 KiB limit; the `limits` model of ADR 0002 stands.
 
 ## Context
 
@@ -46,9 +46,12 @@ Constraints:
 2. Default: R1, R2, R3a, R3c, and R5 for same-name ancestor pairs (`ancestor_pairs = "same-name"`,
    `sibling_level = "off"`). R3b, R4, R6 and C1 are `off`. `preset:strict` turns them on at `warn`
    and sets R5 to `any` pair and siblings to `warn`, the 0.4.0 behavior.
-3. Every default `error` points to a hard limit in an agent's documentation. R1 default: AGENTS.md over
-   32768 bytes is an error; AGENTS.md and CLAUDE.md over 200 lines are a warning. `limits` entries take
-   `bytes_level` and `lines_level` so one entry can carry both; `max_line_chars` is optional.
+3. Every default `error` points to a hard limit in an agent's documentation. R1 default: AGENTS.md
+   files on one path from the root that total over 32768 bytes are an error (`path_limits`, since the
+   Codex limit is a total, and ADR 0002's reason to skip it, defaults that kept a path under 18000
+   bytes, is gone with those defaults); AGENTS.md and CLAUDE.md over 200 lines are a warning. `limits`
+   entries take `bytes_level` and `lines_level`; `max_line_chars` is optional. On 22 public repositories,
+   a per-file check finds 3 files in 2 repositories; the combined check reports 16 files in 6.
 
 R5 same-name pairs passed point 1: on a held-out sample of ten repositories, 0 of 13 findings were
 false positives (upper bound 22.8%); a sample this small passes only with zero. Same-name ancestor
@@ -72,13 +75,13 @@ turning it off later is noticed only by readers of the changelog.
 - `docs/rules.md` states each rule's measured false-positive rate and interval.
 - The 13 R5 findings come from two repositories, and in the tuning sample the same class had 54 false
   positives in one repository (translated and example copies under `docs/<language>/` and `examples/`).
-  Findings in one repository are not independent, so the interval is optimistic.
+  Findings in one repository are not independent, so the interval is optimistic. This class of false
+  positive is known and accepted for 0.5.0: R5 has no path exclusion, so such a repository turns R5
+  off or lists the copies in the allowlist.
 
 Revisit when:
 
 - A heuristic rule passes point 1 on a new sample: move it into the default in a minor release.
 - Users report R5 same-name findings on deliberate copies (translations, examples): add path
   exclusions or turn it off by default.
-- A file under 32 KiB is still cut off because of the combined limit along the path: consider checking
-  the sum, which ADR 0002 left out.
 - Codex documents that it does not drop content past 32 KiB: lower that limit to `warn`.

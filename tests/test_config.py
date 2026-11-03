@@ -108,7 +108,7 @@ class ConfigTest(unittest.TestCase):
     def test_config_load_api(self):
         cfg = config.load(None, TODAY)
         self.assertNotIn("max_line_chars", cfg.rules["R1"])  # omitted in the default: no line-length check
-        self.assertEqual(cfg.rules["R1"]["limits"][0]["max_bytes"], 32768)
+        self.assertEqual(cfg.rules["R1"]["path_limits"][0]["max_bytes"], 32768)
 
 
 if __name__ == "__main__":

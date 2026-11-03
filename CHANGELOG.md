@@ -16,6 +16,9 @@ versions follow [Semantic Versioning](https://semver.org/).
 - R1 `limits` entries accept `bytes_level` and `lines_level` (`error`, `warn` or `off`) to give the byte
   and the line limit of one entry their own level. Omitted, a limit follows the rule level, as before;
   an entry level never raises a finding above the rule level.
+- R1 `path_limits`: `{glob, max_bytes, level}` entries that limit the combined size of a file and the
+  files matching the same glob in its ancestor directories, reported on the file where the total first
+  exceeds the limit. `path_limits = []` turns it off.
 - R1 `max_line_chars` may be omitted; then line length is not checked. A config that sets it keeps the
   old behavior.
 - R5 `ancestor_pairs`: `same-name` counts as ancestor and descendant only a file with the same name
@@ -34,12 +37,17 @@ versions follow [Semantic Versioning](https://semver.org/).
   narrative words) and R6 (copied constants) guess, and C1 checks a convention of this tool, so they
   are `off` by default. R5 by default reports only same-name ancestor pairs (`ancestor_pairs =
   "same-name"`): 0 of 13 such findings on ten held-out public repositories were false positives. Other
-  pairs (different names, the same directory, siblings) are `off` by default. On twelve popular
+  pairs (different names, the same directory, siblings) are `off` by default; a config that set
+  `[rules.R5] level = "error"` to stop a copied CLAUDE.md next to AGENTS.md now needs
+  `ancestor_pairs = "any"` for that. On twelve popular
   public repositories with no config, 0.4.0's sampled false-positive rates were R3b 95%, R4 84%, R5
   100% and R6 76%, and every C1 finding was a difference of convention. To keep the 0.4.0 behavior,
   add `extends = ["preset:strict"]` to your config. See docs/adr/0003.
-- R1 default limits use only limits that an agent's documentation states. `**/AGENTS.md` over 32768
-  bytes is an error: Codex stops reading project docs at 32 KiB (`project_doc_max_bytes`). AGENTS.md
+- R1 default limits use only limits that an agent's documentation states. AGENTS.md files on one path
+  from the root that total over 32768 bytes are an error (`path_limits`): Codex reads AGENTS.md from the
+  root down to the working directory and stops adding files at 32 KiB in total
+  (`project_doc_max_bytes`). On 22 public repositories with no config, a per-file check finds 3 files in
+  2 repositories; the combined check reports 16 files (where the overflow starts) in 6 repositories. AGENTS.md
   and CLAUDE.md over 200 lines are a warning: Claude Code asks for fewer than 200 lines per file and
   reads AGENTS.md when there is no CLAUDE.md, but truncates nothing. The 12000/6000-byte limits and the
   500-character line limit, which had no external source, are removed from the default. To keep the
@@ -48,6 +56,7 @@ versions follow [Semantic Versioning](https://semver.org/).
   ```toml
   [rules.R1]
   max_line_chars = 500
+  path_limits = []
 
   [[rules.R1.limits]]
   glob = "AGENTS.md"

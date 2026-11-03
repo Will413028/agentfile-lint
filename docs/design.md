@@ -65,8 +65,13 @@ expiry warnings appear without commits.
   limit, so the default preset ends with entries that cover every discovered file. Globs use the matcher
   of R2 shapes and R3c specs: `*` and `?` never cross `/`, `**/` matches zero or more directories.
   Depth tiers are written as globs: `AGENTS.md`, `*/AGENTS.md`, `**/AGENTS.md`.
-- Default preset: only limits an agent's documentation states. `**/AGENTS.md` over 32768 bytes is an
-  error: Codex stops reading project docs at 32 KiB (`project_doc_max_bytes`,
+- `path_limits`: `{glob, max_bytes, level}` entries for the combined size of a file and the files
+  matching the same glob in its strict ancestor directories (bytes after block removal). The finding is
+  on the file where the total first exceeds the limit; files below it are not reported again, and a
+  single file over the limit is reported the same way.
+- Default preset: only limits an agent's documentation states. AGENTS.md files on one path that total
+  over 32768 bytes are an error: Codex reads AGENTS.md from the root down to the working directory and
+  stops adding files at 32 KiB in total (`project_doc_max_bytes`,
   https://learn.chatgpt.com/docs/agent-configuration/agents-md). `**/AGENTS.md` and `**/CLAUDE.md` over
   200 lines are a warning: Claude Code asks for fewer than 200 lines per CLAUDE.md file and reads
   AGENTS.md when there is no CLAUDE.md (https://code.claude.com/docs/en/memory), but truncates nothing.
@@ -74,6 +79,7 @@ expiry warnings appear without commits.
 - The old `max_bytes` tier table is rejected with a message that points to the migration note in the
   changelog.
 - Per-line limit in characters (`max_line_chars`), optional; omitted (the default), it is not checked.
+  A merged config cannot remove a key, so once a parent config sets it, a child can only raise it.
 - `excluded_blocks`: marker pairs; the text from a begin marker through the end marker (and one
   trailing newline) is removed before measuring.
 - Exact semantics: files are read as UTF-8 in text mode (CRLF becomes LF); bytes and lines are counted on

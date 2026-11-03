@@ -124,7 +124,7 @@ class ConfigJsonTest(unittest.TestCase):
         data = json.loads(a.stdout)
         self.assertEqual(list(data), sorted(data))
         self.assertEqual(a.stdout, json.dumps(data, sort_keys=True, indent=2, ensure_ascii=False) + "\n")
-        self.assertEqual(data["rules"]["R1"]["limits"][0]["max_bytes"], 32768)
+        self.assertEqual(data["rules"]["R1"]["path_limits"][0]["max_bytes"], 32768)
         self.assertEqual(data["rules"]["C1"]["mode"], "import-only")
 
     def test_reflects_the_repo_config_merge(self):

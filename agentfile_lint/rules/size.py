@@ -3,12 +3,18 @@ character limit per line.
 
 Each `limits` entry may give its byte and line limits their own level (`bytes_level`, `lines_level`);
 an omitted level follows the rule level, and no entry level can raise a finding above the rule level.
+
+`path_limits` limit the combined size of a file and the files matching the same glob in its ancestor
+directories, the set an agent loads from the root down (Codex stops at 32 KiB in total). The finding is
+on the file where the total first exceeds the limit, not on the files below it.
 """
 from __future__ import annotations
 
+import posixpath
 import re
 from typing import Any
 
+from ..context import Context
 from ..discover import glob_to_regex
 from ..errors import ConfigError, check_keys, expect_int, expect_level, expect_str, expect_table_list, require_keys
 from ..finding import Finding
@@ -28,7 +34,7 @@ def validate(params: dict[str, Any]) -> dict[str, Any]:
     where = f"rules.{ID}"
     if "max_bytes" in params:
         raise ConfigError(f"{where}: {_MIGRATION}")
-    check_keys(params, {"level", "max_line_chars", "limits", "excluded_blocks"}, where)
+    check_keys(params, {"level", "max_line_chars", "limits", "path_limits", "excluded_blocks"}, where)
     for key in ("limits", "excluded_blocks"):
         if key not in params:
             raise ConfigError(f"{where}: missing key {key}")
@@ -47,6 +53,14 @@ def validate(params: dict[str, Any]) -> dict[str, Any]:
         for key in ("bytes_level", "lines_level"):
             if key in raw:
                 expect_level(raw[key], f"{at}.{key}")
+    for i, raw in enumerate(expect_table_list(params.get("path_limits", []), f"{where}.path_limits")):
+        at = f"{where}.path_limits[{i}]"
+        check_keys(raw, {"glob", "max_bytes", "level"}, at)
+        require_keys(raw, ["glob", "max_bytes"], at)
+        expect_str(raw["glob"], f"{at}.glob")
+        expect_int(raw["max_bytes"], f"{at}.max_bytes")
+        if "level" in raw:
+            expect_level(raw["level"], f"{at}.level")
     blocks = params["excluded_blocks"]
     if not isinstance(blocks, list):
         raise ConfigError(f"{where}.excluded_blocks: expected a list of {{begin, end}} tables")
@@ -75,10 +89,42 @@ def limit_for(path: str, params: dict[str, Any]) -> dict[str, Any]:
     return {}
 
 
-def check(path: str, text: str, params: dict[str, Any]) -> list[Finding]:
-    body = text
+def _body(text: str, params: dict[str, Any]) -> str:
     for pattern in _block_patterns(params):
-        body = pattern.sub("", body)
+        text = pattern.sub("", text)
+    return text
+
+
+def _in_or_below(directory: str, path: str) -> bool:
+    return directory == "" or posixpath.dirname(path) == directory or path.startswith(directory + "/")
+
+
+def check_repo(ctx: Context, params: dict[str, Any]) -> list[Finding]:
+    found: list[Finding] = []
+    for entry in params.get("path_limits", []):
+        level = entry.get("level", "error")  # "error" = follow the rule level (the engine caps it)
+        if level == "off":
+            continue
+        pattern = glob_to_regex(entry["glob"])
+        sizes = {p: len(_body(t, params).encode("utf-8")) for p, t in ctx.files.items() if pattern.match(p)}
+        limit = entry["max_bytes"]
+        for path in sorted(sizes):
+            ancestors = sorted((a for a in sizes if a != path and _in_or_below(posixpath.dirname(a), path)
+                                and posixpath.dirname(a) != posixpath.dirname(path)), key=lambda a: (a.count("/"), a))
+            before = sum(sizes[a] for a in ancestors)
+            total = before + sizes[path]
+            if total <= limit or before > limit:  # within the limit, or the overflow starts above
+                continue
+            if ancestors:
+                message = f"file and its ancestors ({', '.join(ancestors)}) total {total} bytes, limit {limit}"
+            else:
+                message = f"file is {total} bytes, limit {limit}"
+            found.append(Finding(path, 0, ID, message, level=level))
+    return found
+
+
+def check(path: str, text: str, params: dict[str, Any]) -> list[Finding]:
+    body = _body(text, params)
     found: list[Finding] = []
     size = len(body.encode("utf-8"))  # bytes after block removal
     limit = limit_for(path, params)

@@ -22,8 +22,8 @@ the release that ships it (`Added`, `Changed`, `Fixed`, `Removed`).
   severity, the preset ships `warn`; a repository raises it with `level = "error"` after a clean run.
 - Promoting a rule to `error` in the preset is a minor change and must be listed under a
   `### Graduated` heading, one bullet per rule starting with the rule id in backticks.
-- `tests/test_versioning.py` fails when a rule in `agentfile_lint/presets/default.toml` is above
-  `warn` and not listed under `Graduated`, and when `pyproject.toml`, `__version__` and the newest
+- `tests/test_versioning.py` fails when a rule in any shipped preset (`agentfile_lint/presets/*.toml`)
+  is above `warn` and not listed under `Graduated` (`off` is allowed: lowering needs no entry), and when `pyproject.toml`, `__version__` and the newest
   changelog section disagree.
 - Changing a default value changes every consumer that did not override it: say so under `Changed`.
 

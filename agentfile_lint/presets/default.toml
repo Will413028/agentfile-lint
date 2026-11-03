@@ -16,17 +16,25 @@ level = "error"
 # max_line_chars = 500  # optional: a character limit per line; omitted, line length is not checked
 excluded_blocks = []   # list of { begin = "...", end = "..." } marker pairs not counted
 
-# Size limits by path glob: the first matching entry applies; a file that matches no entry has no size
-# limit. Either or both of max_bytes and max_lines may be set; `bytes_level` / `lines_level` set each
-# one's level (omitted: the rule level; never above it). The default uses only limits with an external
-# source: Codex reads at most 32 KiB of AGENTS.md (`project_doc_max_bytes`,
-# https://learn.chatgpt.com/docs/agent-configuration/agents-md), a hard limit, so an error; Claude Code asks for
-# fewer than 200 lines per CLAUDE.md file (https://code.claude.com/docs/en/memory) and reads AGENTS.md
-# when no CLAUDE.md exists, guidance that truncates nothing, so a warning.
-# A repository config that sets `limits` replaces this whole list.
-[[rules.R1.limits]]
+# The default uses only limits with an external source.
+#
+# Combined size along the path (`path_limits`): a file plus the files matching the same glob in its
+# ancestor directories, reported where the total first exceeds `max_bytes` (`level` optional). Codex
+# reads AGENTS.md from the root down to the working directory and stops adding files once they total
+# 32 KiB (`project_doc_max_bytes`, https://learn.chatgpt.com/docs/agent-configuration/agents-md): a hard
+# limit, so an error. A single file over the limit is reported the same way.
+[[rules.R1.path_limits]]
 glob = "**/AGENTS.md"
 max_bytes = 32768
+
+# Per-file limits by path glob: the first matching entry applies; a file that matches no entry has no
+# per-file limit. Either or both of max_bytes and max_lines may be set; `bytes_level` / `lines_level`
+# set each one's level (omitted: the rule level; never above it). Claude Code asks for fewer than 200
+# lines per CLAUDE.md file (https://code.claude.com/docs/en/memory) and reads AGENTS.md when no
+# CLAUDE.md exists; guidance that truncates nothing, so a warning.
+# A repository config that sets `limits` or `path_limits` replaces that whole list.
+[[rules.R1.limits]]
+glob = "**/AGENTS.md"
 max_lines = 200
 lines_level = "warn"
 
