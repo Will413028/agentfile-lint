@@ -1,6 +1,7 @@
 # ADR 0002: Size limits and triggers
 
-Status: accepted
+Status: accepted. The default values in decision 1 and the rejection of the 32 KiB limit are
+superseded by ADR 0003 (only limits with an external source in the default).
 
 ## Context
 

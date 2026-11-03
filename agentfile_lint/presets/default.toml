@@ -1,4 +1,6 @@
 # Default preset shipped with agentfile-lint. Repo configs extend it and override single keys.
+# It runs only objective checks; the heuristic rules (R3b, R4, R6, R5 between siblings) and the C1
+# convention are `off` here and turned on by `extends = ["preset:strict"]` (presets/strict.toml).
 extends = []
 
 [discover]
@@ -11,32 +13,35 @@ warn_days = 14    # warn when an entry expires within this many days
 
 [rules.R1]
 level = "error"
-max_line_chars = 500
+# max_line_chars = 500  # optional: a character limit per line; omitted, line length is not checked
 excluded_blocks = []   # list of { begin = "...", end = "..." } marker pairs not counted
 
-# Size limits by path glob: the first matching entry applies; a file that matches no entry has no size
-# limit. Either or both of max_bytes and max_lines may be set. The line limit follows Claude Code's
-# guidance of fewer than 200 lines per CLAUDE.md file (https://code.claude.com/docs/en/memory).
-# A repository config that sets `limits` replaces this whole list.
-[[rules.R1.limits]]
-glob = "AGENTS.md"
-max_bytes = 12000
-max_lines = 200
+# The default uses only limits with an external source.
+#
+# Combined size along the path (`path_limits`): a file plus the files matching the same glob in its
+# ancestor directories, reported where the total first exceeds `max_bytes` (`level` optional). Codex
+# reads AGENTS.md from the root down to the working directory and stops adding files once they total
+# 32 KiB (`project_doc_max_bytes`, https://learn.chatgpt.com/docs/agent-configuration/agents-md): a hard
+# limit, so an error. A single file over the limit is reported the same way.
+[[rules.R1.path_limits]]
+glob = "**/AGENTS.md"
+max_bytes = 32768
 
-[[rules.R1.limits]]
-glob = "CLAUDE.md"
-max_bytes = 12000
-max_lines = 200
-
+# Per-file limits by path glob: the first matching entry applies; a file that matches no entry has no
+# per-file limit. Either or both of max_bytes and max_lines may be set; `bytes_level` / `lines_level`
+# set each one's level (omitted: the rule level; never above it). Claude Code asks for fewer than 200
+# lines per CLAUDE.md file (https://code.claude.com/docs/en/memory) and reads AGENTS.md when no
+# CLAUDE.md exists; guidance that truncates nothing, so a warning.
+# A repository config that sets `limits` or `path_limits` replaces that whole list.
 [[rules.R1.limits]]
 glob = "**/AGENTS.md"
-max_bytes = 6000
 max_lines = 200
+lines_level = "warn"
 
 [[rules.R1.limits]]
 glob = "**/CLAUDE.md"
-max_bytes = 6000
 max_lines = 200
+lines_level = "warn"
 
 # ---------------------------------------------------------------------------------------------
 # Rules added after R1 enter at `warn` (see CHANGELOG, "Graduated"). A repository raises a rule
@@ -74,8 +79,9 @@ files = ["**/test_*.py", "**/*_test.py"]
 
 # R3b path references: heuristic, tried against the file's directory, its ancestors, the repo root
 # and `base_dirs` (entries may use `*`), also under `source_roots` and with `resolve_extensions`.
+# Off by default (heuristic); preset:strict sets warn.
 [rules.R3b]
-level = "warn"
+level = "off"
 base_dirs = []
 source_roots = []
 resolve_extensions = []
@@ -104,8 +110,9 @@ ignore_before = []        # skip a reference when the text before it on the line
 plain_words = ["see", "spec", "specification", "section", "sections", "in", "per", "and", "or", "to", "at", "of", "the", "also", "cf", "ref"]  # ...unless the word before is one of these
 
 # R4 rot: dates and issue numbers at the rule level, narrative words at narrative_level.
+# Off by default (heuristic); preset:strict sets warn.
 [rules.R4]
-level = "warn"
+level = "off"
 narrative_level = "warn"
 date_patterns = ['(?<![0-9])(?:19|20)\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])(?![0-9])']
 issue_patterns = [
@@ -122,16 +129,20 @@ narrative_words = [
 
 # R5 duplicates: identical lines (>= min_chars) in an ancestor and a descendant file at the rule
 # level, in sibling files at sibling_level. Always compares the full tracked set.
+# `ancestor_pairs`: `same-name` counts only same-name files in ancestor directories (AGENTS.md and
+# sub/AGENTS.md, which one agent loads together); `any` also counts different names and files in one
+# directory. Other pairs are siblings. Both are off by default; preset:strict sets `any` and warn.
 [rules.R5]
 level = "warn"
-sibling_level = "warn"
+sibling_level = "off"
+ancestor_pairs = "same-name"
 min_chars = 40
 ignore_headings = true
 ignore_patterns = []
 
-# R6 copied constants: candidates only, always warnings.
+# R6 copied constants: candidates only, always warnings. Off by default (heuristic); preset:strict sets warn.
 [rules.R6]
-level = "warn"
+level = "off"
 candidate_patterns = [
   '`[A-Za-z_][A-Za-z0-9_.]*\s*(?::=|=|:)\s*-?\d[0-9_.,]*[A-Za-z%]*`',
   '\b[A-Z][A-Z0-9]*_[A-Z0-9_]+\b[ \t`=:]{1,6}[0-9]+',
@@ -139,7 +150,8 @@ candidate_patterns = [
 ]
 
 # C1 CLAUDE.md: `import-only` (one line, the import) or `forbid` (no CLAUDE.md at all).
+# Off by default (a convention of this tool, not an error in other repositories); preset:strict sets warn.
 [rules.C1]
-level = "warn"
+level = "off"
 mode = "import-only"
 import_line = "@AGENTS.md"

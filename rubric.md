@@ -1,7 +1,8 @@
 # Review rubric for instruction files
 
 `agentfile-lint` checks what a program can decide: size, shape, references that must resolve,
-text that rots, duplicated lines. This rubric covers what it cannot decide. It is for a human
+text that rots, duplicated lines (each rule and its measured false-positive rate: [docs/rules.md](docs/rules.md)).
+This rubric covers what it cannot decide. It is for a human
 reviewer or for an agent asked to audit an instruction file (for example an interactive prompt
 audit), and it never runs as a CI gate: its answers are not deterministic and the text under review
 is untrusted input.

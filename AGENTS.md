@@ -8,9 +8,9 @@
 - 對自己跑檢查：`python3 -m agentfile_lint`（只掃 git 追蹤的檔案）。
 - 子命令：`vendor`、`check-pins`（各引用處釘同一個完整 SHA）、`config --format json`（有效設定的 JSON）。
 - 新規則一律以 `warn` 進入預設 preset，升 `error` 要在 CHANGELOG 的 `Graduated` 列出（`tests/test_versioning.py` 檢查）；流程見 `docs/versioning.md`。
-- 規則是資料（`agentfile_lint/presets/default.toml` 與 repo 設定檔），行為差異不寫成程式裡的 repo 專屬分支；未知設定鍵一律失敗。
+- 規則是資料（`agentfile_lint/presets/*.toml`：`default` 只放客觀檢查、`strict` 加啟發式規則，見 `docs/adr/0003`；與 repo 設定檔），行為差異不寫成程式裡的 repo 專屬分支；未知設定鍵一律失敗。
 - 輸出格式 `file:line: rule-id: message` 與退出碼（0／1／2）是對外契約；改動要同步更新 `tests/test_contract.py` 並視為 major 變更。
 - `tests/fixtures/legacy-oracle/` 是舊檢查器的快照，只供比對，不維護、不修改。
 - 模組依賴方向：`rules/` 只引用核心模組（`context`、`discover`、`errors`、`finding`、`rules._text`），不引用 `cli`、`config`、`vendor`、`check_pins`；整個套件不得有循環引用（`tests/test_architecture.py` 檢查）。
-- 改動走 PR：`main` 需要 PR 且 CI 全綠才能合併，不直接推。漏洞修補期限與回報管道見 `SECURITY.md`。
+- 分支模型（branch model）：日常改動在 `dev`（可直接推）；`main` 只放已發布的程式，只經 `dev` → `main` 的 PR 改動，CI 全綠後用 merge commit 合併（不 squash），發版流程見 `docs/versioning.md`。漏洞修補期限與回報管道見 `SECURITY.md`。
 - 設計見 `docs/design.md`，決定見 `docs/adr/`。

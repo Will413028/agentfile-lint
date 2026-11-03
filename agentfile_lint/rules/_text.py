@@ -1,12 +1,23 @@
 """Shared text helpers for rules: skip fenced code and HTML comments, find inline code spans."""
 from __future__ import annotations
 
+import posixpath
 import re
 from typing import Iterator
 
 _FENCE = re.compile(r"\s*(`{3,}|~{3,})")
 _COMMENT = re.compile(r"<!--.*?-->")
 SPAN = re.compile(r"`([^`\n]+)`")
+
+
+def parent_dirs(path: str) -> list[str]:
+    """Directories strictly above the directory of `path`, nearest first; the root is ""."""
+    out: list[str] = []
+    d = posixpath.dirname(path)
+    while d:
+        d = posixpath.dirname(d)
+        out.append(d)
+    return out
 
 
 def prose_lines(text: str) -> Iterator[tuple[int, str]]:

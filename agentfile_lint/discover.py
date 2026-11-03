@@ -1,6 +1,8 @@
 """File discovery: tracked instruction files only, always the full set (never just argv)."""
 from __future__ import annotations
 
+import os
+import posixpath
 import re
 import subprocess
 from pathlib import Path
@@ -66,3 +68,25 @@ def tracked_files(root: Path) -> list[str]:
 def instruction_files(root: Path, globs: list[str]) -> list[str]:
     """Tracked files matching `globs` that still exist in the working tree (staged deletions skipped)."""
     return [p for p in tracked_files(root) if matches(p, globs) and (root / p).is_file()]
+
+
+def aliases(root: Path, paths: list[str]) -> dict[str, str]:
+    """Paths that are the same file as another path in the same directory: alias -> kept path.
+
+    `CLAUDE.md -> AGENTS.md` gives one file two names in one directory, each loaded by a different
+    agent, so it is analyzed once. Identity is device and inode, so case-insensitive file systems agree
+    and a symlink loop is skipped. The kept path is the first non-symlink, else the first in sort order.
+    The same file in another directory is a separate load location and is analyzed on its own.
+    """
+    groups: dict[tuple[str, int, int], list[str]] = {}
+    for path in paths:
+        try:
+            st = os.stat(root / path)
+        except OSError:
+            continue
+        groups.setdefault((posixpath.dirname(path), st.st_dev, st.st_ino), []).append(path)
+    out: dict[str, str] = {}
+    for members in groups.values():
+        kept = next((p for p in members if not (root / p).is_symlink()), members[0])
+        out.update({p: kept for p in members if p != kept})
+    return out

@@ -21,8 +21,9 @@ locally and in CI does.
 - No LLM in the gate (non-deterministic, paid, and the checked text is untrusted input).
 - Not a Markdown style linter; it knows instruction-file semantics (tiers, budgets), not prose style.
 - Untracked local instruction files (`*.local.md`) are out of scope; CI cannot see them.
-- Not published to a package index. Distribution is a git repository (pre-commit hook, composite
-  action, `uvx --from git+...`) and, later, a pinned vendored copy for restricted environments (see Vendored copy).
+- No distribution channel the runner depends on. It ships as a git repository (pre-commit hook,
+  composite action), a PyPI package (`uvx agentfile-lint`) and a pinned vendored copy for restricted
+  environments (see Vendored copy); consumers pin a version or a full commit SHA.
 
 ## Model
 
@@ -41,9 +42,16 @@ effective config + git ls-files (full set) -> rules -> findings -> allowlist -> 
 
 Files are `git ls-files` entries matching `discover.globs` (default `AGENTS.md`, `**/AGENTS.md`,
 `CLAUDE.md`, `**/CLAUDE.md`), never a file ending in `.local.md`, skipping files deleted in the
-working tree. File names given on the command line are not used to narrow the analysis: cross-file rules
-and the allowlist "no longer needed" check need the whole set, and a partial view would make
-them pass locally and fail in CI. Hooks therefore use `pass_filenames: false`.
+working tree. Two discovered paths in the same directory that are the same file (for example
+`CLAUDE.md -> AGENTS.md`) are one file under two names, each loaded by a different agent: only the
+non-symlink path is analyzed (the first in sort order when all are symlinks), so no rule reports the
+same text twice. The same file in another
+directory is a separate load location and is analyzed on its own; when it sits in an ancestor or
+descendant directory, an agent working there loads both, and R5 reports the repeated lines. A
+symlink to a file outside the discovered set is analyzed as its own file; a dangling one is skipped.
+File names given on the command line are not used to narrow the analysis: cross-file rules and the
+allowlist "no longer needed" check need the whole set, and a partial view would make them pass locally
+and fail in CI. Hooks therefore use `pass_filenames: false`.
 
 Trigger scope: R3a, R3b and R3c depend on test files, source and docs, not only on instruction files,
 so a hook or workflow must not filter by instruction-file paths. The pre-commit hook sets
@@ -53,17 +61,29 @@ expiry warnings appear without commits.
 
 ## Rule R1: size
 
-- Limits come from `limits`, an ordered list of `{glob, max_bytes, max_lines}` entries (either or both
-  limits). The first entry whose glob matches the path applies; a file that matches no entry has no size
+- Limits come from `limits`, an ordered list of `{glob, max_bytes, max_lines, bytes_level, lines_level}`
+  entries (either or both limits; each level is optional and defaults to the rule level, which caps it). The first entry whose glob matches the path applies; a file that matches no entry has no size
   limit, so the default preset ends with entries that cover every discovered file. Globs use the matcher
   of R2 shapes and R3c specs: `*` and `?` never cross `/`, `**/` matches zero or more directories.
   Depth tiers are written as globs: `AGENTS.md`, `*/AGENTS.md`, `**/AGENTS.md`.
-- Default preset: `AGENTS.md` and `CLAUDE.md` at the root, 12000 bytes and 200 lines; `**/AGENTS.md` and
-  `**/CLAUDE.md`, 6000 bytes and 200 lines. The line limit follows Claude Code's official guidance of
-  fewer than 200 lines per CLAUDE.md file (https://code.claude.com/docs/en/memory).
+- `path_limits`: `{glob, max_bytes, level}` entries for the combined size of a file and the files
+  matching the same glob in its strict ancestor directories; every entry applies (unlike `limits`).
+  Sizes are the bytes on disk, as the agent reads them: `excluded_blocks` and CRLF are not discounted.
+  The finding is on the file where the total first exceeds the limit; files below it are not reported
+  again, and a single file over the limit is reported the same way. The glob is meant to match one file
+  per directory (`**/AGENTS.md`); Codex also loads `AGENTS.override.md` or fallback names instead of
+  AGENTS.md, which the default does not model (revisit when an issue reports such a repository).
+- Default preset: only limits an agent's documentation states. AGENTS.md files on one path that total
+  over 32768 bytes are an error: Codex reads AGENTS.md from the root down to the working directory and
+  stops adding files at 32 KiB in total (`project_doc_max_bytes`,
+  https://learn.chatgpt.com/docs/agent-configuration/agents-md). `**/AGENTS.md` and `**/CLAUDE.md` over
+  200 lines are a warning: Claude Code asks for fewer than 200 lines per CLAUDE.md file and reads
+  AGENTS.md when there is no CLAUDE.md (https://code.claude.com/docs/en/memory), but truncates nothing.
+  Every default error must point to such a hard limit (docs/adr/0003).
 - The old `max_bytes` tier table is rejected with a message that points to the migration note in the
   changelog.
-- Per-line limit in characters.
+- Per-line limit in characters (`max_line_chars`), optional; omitted (the default), it is not checked.
+  A merged config cannot remove a key, so once a parent config sets it, a child can only raise it.
 - `excluded_blocks`: marker pairs; the text from a begin marker through the end marker (and one
   trailing newline) is removed before measuring.
 - Exact semantics: files are read as UTF-8 in text mode (CRLF becomes LF); bytes and lines are counted on
@@ -73,8 +93,10 @@ expiry warnings appear without commits.
 
 ## Rules R2 to R6 and C1
 
-All of them enter the default preset at `warn` (see Versioning); the severity named below is what a
-repository gets with `level = "error"`. Each rule reads its parameters from the config, and the
+The default preset runs only objective checks: R2, R3a, R3c and R5 (same-name ancestor pairs) at
+`warn`; R3b, R4 and R6 guess and C1 checks a convention, so they are `off` and `preset:strict` turns
+them on at `warn`, with R5 on any pair (docs/adr/0003). New rules enter at `warn` (see Versioning);
+the severity named below is what a repository gets with `level = "error"`. Each rule reads its parameters from the config, and the
 preset documents every key. Cross-file rules (`check_repo`) always see the full tracked set.
 Fenced code blocks and HTML comments are ignored by every text rule.
 
@@ -90,8 +112,9 @@ Fenced code blocks and HTML comments are ignored by every text rule.
   also under `source_roots` and with `resolve_extensions`. Existence means a tracked file or the
   directory of one. Skipped: spaces and `<>*{}$=|()[]?`, URLs, `@`/`~`/`-`/`/` prefixes, matches of
   `ignore_patterns`, lines with an `ignore_negated_words` word, and bare file names unless
-  `check_bare_names`. Measured against real repositories this heuristic had a false-positive rate
-  of several percent and found no broken reference, which is why it stays at `warn`.
+  `check_bare_names`. On twelve popular public repositories with no config, 18 of the 19 sampled
+  findings that could be judged were false positives (external or placeholder paths, paths relative to each
+  package), so it is `off` by default and `warn` in `preset:strict`.
 - R3c spec references: `specs` maps instruction files to a spec document (`{1}` is what the glob's first
   `*` matched); each `ref_pattern` match must match a numbered heading (`heading_pattern`; a heading
   2.1 also makes section 2 valid). Skipped: references qualified by an ASCII word other than
@@ -100,13 +123,17 @@ Fenced code blocks and HTML comments are ignored by every text rule.
   A match inside a token that has a path separator, a file extension or a date-prefixed slug is a name,
   not a date.
 - R5 duplicates: lines of at least `min_chars` characters, compared after collapsing whitespace and
-  removing a list marker; headings and table rules are skipped. Same line in a file and in a file of an
-  ancestor directory (or the same directory) is reported on the descendant at the rule level; between
-  siblings at `sibling_level`. Exact matches only. Always the full set (a partial view
+  removing a list marker; headings and table rules are skipped. Same line in a file and in an ancestor
+  file is reported on the descendant at the rule level. `ancestor_pairs = "same-name"` (default) counts
+  only a file with the same name in a strict ancestor directory, the pair one agent loads together
+  (Codex reads AGENTS.md from the root down to the working directory, Claude Code CLAUDE.md from the
+  working directory up); `any` (strict) also counts different names and two files in one directory.
+  Every other pair is a sibling pair, reported at `sibling_level` (default `off`, strict `warn`). Exact matches only. Always the full set (a partial view
   would pass locally and fail in CI).
 - R6 constants: candidate patterns for values copied from code; findings are always warnings.
 - C1 CLAUDE.md: any tracked file named `CLAUDE.md`, whatever `discover.globs` says. `import-only`:
-  exactly one non-blank line, `import_line`, and an AGENTS.md next to it. `forbid`: must not exist.
+  exactly one non-blank line, `import_line`, and an AGENTS.md next to it; a symlink to that AGENTS.md
+  counts as the import. `forbid`: must not exist (a symlink included).
 
 A finding carries its own level and the rule level caps it: a rule at `warn` never produces an error,
 and a rule at `error` can still report some findings (R4 narrative words, R5 siblings, R6) as warnings.

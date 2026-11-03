@@ -1,10 +1,13 @@
 """R5: identical lines across instruction files.
 
 A line (whitespace-collapsed, list marker removed) of at least `min_chars` characters that appears
-in two files is duplicated text. If one file is in an ancestor directory of the other (or in the same
-directory), the descendant repeats what is already loaded: reported at the rule's level, on the
-descendant's line. Between siblings it is reported at `sibling_level`. Exact matches only; the
-whole tracked instruction-file set is always compared, never just the files named on the command line.
+in two files is duplicated text. If one file is in an ancestor directory of the other, the descendant
+repeats what is already loaded: reported at the rule's level, on the descendant's line. Which pairs
+count as ancestor and descendant is `ancestor_pairs`: `same-name` (two files with the same name, the
+ancestor in a strict ancestor directory, as one agent loads them) or `any` (also different names, and
+two files in one directory). Every other pair is a sibling pair, reported at `sibling_level`. Exact
+matches only; the whole tracked instruction-file set is always compared, never just the files named
+on the command line.
 """
 from __future__ import annotations
 
@@ -13,15 +16,16 @@ import re
 from typing import Any
 
 from ..context import Context
-from ..errors import check_keys, expect_bool, expect_int, expect_level, expect_regex_list, require_keys
+from ..errors import ConfigError, check_keys, expect_bool, expect_int, expect_level, expect_regex_list, require_keys
 from ..finding import Finding
-from ._text import prose_lines
+from ._text import parent_dirs, prose_lines
 
 ID = "R5"
 NAME = "duplicates"
 DESCRIPTION = "identical lines in ancestor/descendant files (rule level) or sibling files (sibling_level)"
 
-_KEYS = {"level", "sibling_level", "min_chars", "ignore_headings", "ignore_patterns"}
+_KEYS = {"level", "sibling_level", "ancestor_pairs", "min_chars", "ignore_headings", "ignore_patterns"}
+_PAIRS = ("same-name", "any")
 _MARKER = re.compile(r"^(?:[-*+]|\d+[.)])\s+")
 _TABLE_RULE = re.compile(r"^\|?[\s:|-]+\|?$")
 
@@ -33,10 +37,17 @@ def validate(params: dict[str, Any]) -> dict[str, Any]:
     return {
         "level": params["level"],
         "sibling_level": expect_level(params["sibling_level"], f"{where}.sibling_level"),
+        "ancestor_pairs": _expect_pairs(params["ancestor_pairs"], f"{where}.ancestor_pairs"),
         "min_chars": expect_int(params["min_chars"], f"{where}.min_chars"),
         "ignore_headings": expect_bool(params["ignore_headings"], f"{where}.ignore_headings"),
         "ignore_patterns": expect_regex_list(params["ignore_patterns"], f"{where}.ignore_patterns"),
     }
+
+
+def _expect_pairs(value: Any, where: str) -> str:
+    if value not in _PAIRS:
+        raise ConfigError(f"{where}: expected one of {', '.join(_PAIRS)}")
+    return value
 
 
 def _normalize(line: str) -> str:
@@ -49,6 +60,11 @@ def _is_ancestor(a: str, b: str) -> bool:
     if da == db:
         return a < b
     return da == "" or db.startswith(da + "/")
+
+
+def _is_same_name_ancestor(a: str, b: str) -> bool:
+    """File `a` has the name of `b` and sits in a strict ancestor directory of `b`."""
+    return posixpath.basename(a) == posixpath.basename(b) and posixpath.dirname(a) in parent_dirs(b)
 
 
 def check_repo(ctx: Context, params: dict[str, Any]) -> list[Finding]:
@@ -64,16 +80,17 @@ def check_repo(ctx: Context, params: dict[str, Any]) -> list[Finding]:
             groups.setdefault(line, {}).setdefault(path, number)
     found: list[Finding] = []
     sibling = params["sibling_level"]
+    is_ancestor = _is_same_name_ancestor if params["ancestor_pairs"] == "same-name" else _is_ancestor
     for line, where in groups.items():
         if len(where) < 2:
             continue
         shown = line if len(line) <= 60 else line[:57] + "..."
         for path, number in where.items():
-            ancestors = sorted((o for o in where if o != path and _is_ancestor(o, path)), key=lambda o: (-len(posixpath.dirname(o)), o))
+            ancestors = sorted((o for o in where if o != path and is_ancestor(o, path)), key=lambda o: (-len(posixpath.dirname(o)), o))
             if ancestors:
                 found.append(Finding(path, number, ID, f"line repeats {ancestors[0]}:{where[ancestors[0]]} ({shown!r}); keep it in the ancestor only"))
                 continue
-            others = [o for o in where if o != path and not _is_ancestor(path, o)]
+            others = [o for o in where if o != path and not is_ancestor(path, o)]
             if others and sibling != "off":
                 names = ", ".join(f"{o}:{where[o]}" for o in sorted(others)[:3])
                 more = f" and {len(others) - 3} more" if len(others) > 3 else ""

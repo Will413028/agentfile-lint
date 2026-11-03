@@ -3,6 +3,7 @@ updates:
   # The runner has no third-party dependencies; only workflow actions need updates.
   - package-ecosystem: github-actions
     directory: /
+    target-branch: dev
     schedule:
       interval: weekly
     cooldown:

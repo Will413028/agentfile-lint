@@ -161,8 +161,10 @@ ignore_negated_words = ["no longer"]
         rc, _, err = self.run_one("`schema.gone.sql`\n", self.CFG + "check_bare_names = true\n")
         self.assertEqual(rc, 1)
 
-    def test_default_level_is_warn(self):
+    def test_off_by_default_and_warn_in_strict(self):
         rc, out, err = lint({"AGENTS.md": "`gone/file.go`\n"})
+        self.assertEqual((rc, only("R3b", out + err)), (0, []))
+        rc, out, err = lint({"AGENTS.md": "`gone/file.go`\n"}, 'extends = ["preset:strict"]\n')
         self.assertEqual(rc, 0)
         self.assertEqual(len(only("R3b", out)), 1)
 
@@ -242,7 +244,7 @@ class RotTest(unittest.TestCase):  # R4
         self.assertEqual((rc, out, err), (0, [], []))
 
     def test_rule_level_warn_caps_dates_to_warnings(self):
-        rc, out, err = lint({"AGENTS.md": "Done 2026-10-31.\n"})
+        rc, out, err = lint({"AGENTS.md": "Done 2026-10-31.\n"}, '[rules.R4]\nlevel = "warn"\n')
         self.assertEqual(rc, 0)
         self.assertEqual(len(only("R4", out)), 1)
 
@@ -272,7 +274,7 @@ class DuplicateTest(unittest.TestCase):  # R5
 
     def test_sibling_duplicate_is_a_warning_on_both(self):
         files = {"a/AGENTS.md": self.LINE, "b/AGENTS.md": "x\n" + self.LINE, "AGENTS.md": "root\n"}
-        rc, out, err = lint(files, self.CFG)
+        rc, out, err = lint(files, self.CFG + 'sibling_level = "warn"\n')
         self.assertEqual(rc, 0)
         self.assertEqual(sorted(line.split(":")[0] for line in only("R5", out)), ["a/AGENTS.md", "b/AGENTS.md"])
 
@@ -280,6 +282,43 @@ class DuplicateTest(unittest.TestCase):  # R5
         files = {"a/AGENTS.md": self.LINE, "b/AGENTS.md": self.LINE}
         rc, _, err = lint(files, self.CFG + 'sibling_level = "error"\n')
         self.assertEqual(rc, 1)
+
+    def test_default_reports_only_same_name_ancestor_pairs(self):
+        # An agent working in sub/ loads AGENTS.md and sub/AGENTS.md; the other pairs are read by
+        # different agents (AGENTS.md vs CLAUDE.md) or by none together (siblings).
+        files = {"AGENTS.md": self.LINE, "CLAUDE.md": self.LINE, "sub/AGENTS.md": self.LINE,
+                 "docs/CLAUDE.md": self.LINE, "a/AGENTS.md": "a\n" + self.LINE}
+        rc, out, err = lint(files)
+        self.assertEqual(rc, 0)
+        got = sorted(line.split(": R5: ")[0] + " " + line.split("line repeats ")[1].split(" ")[0]
+                     for line in only("R5", out) if "line repeats" in line)
+        self.assertEqual(got, ["a/AGENTS.md:2 AGENTS.md:1", "docs/CLAUDE.md:1 CLAUDE.md:1", "sub/AGENTS.md:1 AGENTS.md:1"])
+        self.assertEqual(only("R5", out + err), [x for x in only("R5", out) if "line repeats" in x])  # no sibling lines
+
+    def test_same_name_ancestors_skip_other_pairs_for_sibling_level(self):
+        # With same-name pairs only, AGENTS.md + CLAUDE.md in one directory are compared as siblings.
+        files = {"AGENTS.md": self.LINE, "CLAUDE.md": self.LINE}
+        cfg = self.CFG + 'ancestor_pairs = "same-name"\nsibling_level = "warn"\n'
+        rc, out, err = lint(files, cfg)
+        self.assertEqual(rc, 0)
+        self.assertEqual(sorted(x.split(":")[0] for x in only("R5", out)), ["AGENTS.md", "CLAUDE.md"])
+        self.assertTrue(all("sibling file(s)" in x for x in only("R5", out)))
+
+    def test_any_pairs_keep_the_0_4_behavior(self):
+        files = {"AGENTS.md": self.LINE, "CLAUDE.md": self.LINE, "sub/CLAUDE.md": self.LINE}
+        rc, _, err = lint(files, self.CFG + 'ancestor_pairs = "any"\n')
+        self.assertEqual(rc, 1)
+        self.assertEqual(sorted(x.split(": R5: ")[0] for x in only("R5", err)), ["CLAUDE.md:1", "sub/CLAUDE.md:1"])
+
+    def test_strict_compares_any_pairs(self):
+        files = {"AGENTS.md": self.LINE, "CLAUDE.md": self.LINE}
+        rc, out, _ = lint(files, 'extends = ["preset:strict"]\n')
+        self.assertTrue([x for x in only("R5", out) if x.startswith("CLAUDE.md:1: R5: line repeats AGENTS.md:1")], out)
+
+    def test_bad_ancestor_pairs_fails(self):
+        rc, _, err = lint({"AGENTS.md": "ok\n"}, self.CFG + 'ancestor_pairs = "same"\n')
+        self.assertEqual(rc, 2)
+        self.assertIn("rules.R5.ancestor_pairs", "\n".join(err))
 
     def test_threshold_is_configurable(self):
         files = {"AGENTS.md": "short repeated line\n", "sub/AGENTS.md": "short repeated line\n"}
