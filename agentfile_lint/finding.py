@@ -48,7 +48,8 @@ def _escape_property(text: str) -> str:
 
 
 def format_github(f: Finding) -> str:
-    """A GitHub workflow command. GitHub has no whole-file annotation: without `line` it shows line 1.
+    """A GitHub workflow command. GitHub has no whole-file annotation; without `line` its API reports
+    `start_line` 0.
     The message is the text line, so findings past GitHub's annotation limits keep their location in
     the log."""
     props = [f"file={_escape_property(f.path)}"]

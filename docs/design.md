@@ -166,7 +166,8 @@ Every finding goes to stdout, sorted by file, line, rule (docs/adr/0004).
   (`null` for the whole file), `level` (`error` or `warning`), `rule` and `message`. `version` goes up
   only when a field is removed or changes meaning, not when one is added.
 - `--format github`: one workflow command per finding, `::error` or `::warning` with `file`, `line`
-  (omitted for the whole file; GitHub then shows it on line 1) and `title` set to the rule id,
+  (omitted for the whole file; GitHub has no whole-file annotation, and its API then reports
+  `start_line` 0) and `title` set to the rule id,
   escaped like `escapeData` and `escapeProperty` in actions/toolkit `packages/core/src/command.ts`.
   The message is the text-format line, so a finding past GitHub's annotation limits (10 errors and 10
   warnings per step, 50 per job) keeps its location in the log. `action.yml` passes this format.
