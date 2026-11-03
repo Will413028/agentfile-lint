@@ -70,32 +70,23 @@ def instruction_files(root: Path, globs: list[str]) -> list[str]:
     return [p for p in tracked_files(root) if matches(p, globs) and (root / p).is_file()]
 
 
-def _nested(a: str, b: str) -> bool:
-    """One path sits in a strict ancestor directory of the other."""
-    da, db = posixpath.dirname(a), posixpath.dirname(b)
-    if da == db:
-        return False
-    return da == "" or db == "" or db.startswith(da + "/") or da.startswith(db + "/")
-
-
 def aliases(root: Path, paths: list[str]) -> dict[str, str]:
-    """Symlinked paths that are the same file as another path in `paths`: alias -> kept path.
+    """Paths that are the same file as another path in the same directory: alias -> kept path.
 
-    A symlink such as `CLAUDE.md -> AGENTS.md` is the same file under a second name that a different
-    agent loads, so it is analyzed once. Per file (device and inode, so case-insensitive file systems
-    agree) the kept path is the first non-symlink, else the shallowest symlink. A symlink in an ancestor
-    or descendant directory of the kept path is not an alias: agents load both, so R5 reports it.
+    `CLAUDE.md -> AGENTS.md` gives one file two names in one directory, each loaded by a different
+    agent, so it is analyzed once. Identity is device and inode, so case-insensitive file systems agree
+    and a symlink loop is skipped. The kept path is the first non-symlink, else the first in sort order.
+    The same file in another directory is a separate load location and is analyzed on its own.
     """
-    groups: dict[tuple[int, int], list[str]] = {}
+    groups: dict[tuple[str, int, int], list[str]] = {}
     for path in paths:
         try:
             st = os.stat(root / path)
         except OSError:
             continue
-        groups.setdefault((st.st_dev, st.st_ino), []).append(path)
+        groups.setdefault((posixpath.dirname(path), st.st_dev, st.st_ino), []).append(path)
     out: dict[str, str] = {}
     for members in groups.values():
-        real = [p for p in members if not (root / p).is_symlink()]
-        kept = real[0] if real else min(members, key=lambda p: (p.count("/"), p))
-        out.update({p: kept for p in members if p != kept and (root / p).is_symlink() and not _nested(p, kept)})
+        kept = next((p for p in members if not (root / p).is_symlink()), members[0])
+        out.update({p: kept for p in members if p != kept})
     return out

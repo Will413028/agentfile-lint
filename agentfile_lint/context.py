@@ -5,9 +5,8 @@ from pathlib import Path, PurePosixPath
 
 
 class Context:
-    def __init__(self, root: Path, tracked: list[str], files: dict[str, str], aliases: dict[str, str] | None = None):
+    def __init__(self, root: Path, tracked: list[str], files: dict[str, str]):
         self.root = root
-        self.aliases = aliases or {}    # symlinked instruction file -> the path analyzed in its place
         self.tracked = tracked          # every `git ls-files` entry
         self.files = files              # analyzed instruction files (valid UTF-8): path -> text
         self.tracked_set = set(tracked)

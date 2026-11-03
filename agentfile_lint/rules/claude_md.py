@@ -2,12 +2,14 @@
 
 `import-only` (default): a tracked CLAUDE.md must contain exactly one non-blank line, the import
 line (`@AGENTS.md`), and an AGENTS.md must sit next to it; a symlink to that AGENTS.md counts as the
-import (a CLAUDE.md that discovery treats as an alias of it). `forbid`: no tracked CLAUDE.md at all.
+import. `forbid`: no tracked CLAUDE.md at all.
 Looks at every tracked file named CLAUDE.md, whatever `discover.globs` says. `*.local.md` is never touched.
 """
 from __future__ import annotations
 
+import os
 import posixpath
+from pathlib import Path
 from typing import Any
 
 from ..context import Context
@@ -39,7 +41,7 @@ def check_repo(ctx: Context, params: dict[str, Any]) -> list[Finding]:
             found.append(Finding(path, 0, ID, "CLAUDE.md must not exist (mode forbid); keep the instructions in AGENTS.md"))
             continue
         sibling = posixpath.join(posixpath.dirname(path), "AGENTS.md")
-        if ctx.aliases.get(path) is not None and ctx.aliases[path] == ctx.aliases.get(sibling, sibling):
+        if sibling in ctx.tracked_set and (ctx.root / path).is_symlink() and _same_file(ctx.root / path, ctx.root / sibling):
             continue  # a symlink to the sibling AGENTS.md loads the same text as the import line
         text = ctx.read(path)
         lines = [] if text is None else [line.strip() for line in text.splitlines() if line.strip()]
@@ -49,3 +51,9 @@ def check_repo(ctx: Context, params: dict[str, Any]) -> list[Finding]:
             found.append(Finding(path, 0, ID, f"imports {params['import_line']} but {sibling} is not tracked"))
     return found
 
+
+def _same_file(a: Path, b: Path) -> bool:
+    try:
+        return os.path.samefile(a, b)
+    except OSError:  # missing file or symlink loop
+        return False

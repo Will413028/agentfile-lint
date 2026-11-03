@@ -41,14 +41,15 @@ effective config + git ls-files (full set) -> rules -> findings -> allowlist -> 
 
 Files are `git ls-files` entries matching `discover.globs` (default `AGENTS.md`, `**/AGENTS.md`,
 `CLAUDE.md`, `**/CLAUDE.md`), never a file ending in `.local.md`, skipping files deleted in the
-working tree. A tracked symlink that is the same file as another discovered path in the same or a
-sibling directory (for example `CLAUDE.md -> AGENTS.md`) is an alias: only the non-symlink path is
-analyzed (if all are symlinks, the shallowest), so no rule reports the same text twice. A symlink in an
-ancestor or descendant directory of its target is not an alias: an agent working there loads both
-files, so R5 reports the repeated lines. A symlink to a file outside the discovered set is analyzed as
-its own file; a dangling one is skipped. File names given on the command line are not used to narrow
-the analysis: cross-file rules and the allowlist "no longer needed" check need the whole set, and a
-partial view would make them pass locally and fail in CI. Hooks therefore use `pass_filenames: false`.
+working tree. Two discovered paths in the same directory that are the same file (for example
+`CLAUDE.md -> AGENTS.md`) are one file under two names, each loaded by a different agent: only the
+non-symlink path is analyzed, so no rule reports the same text twice. The same file in another
+directory is a separate load location and is analyzed on its own; when it sits in an ancestor or
+descendant directory, an agent working there loads both, and R5 reports the repeated lines. A
+symlink to a file outside the discovered set is analyzed as its own file; a dangling one is skipped.
+File names given on the command line are not used to narrow the analysis: cross-file rules and the
+allowlist "no longer needed" check need the whole set, and a partial view would make them pass locally
+and fail in CI. Hooks therefore use `pass_filenames: false`.
 
 Trigger scope: R3a, R3b and R3c depend on test files, source and docs, not only on instruction files,
 so a hook or workflow must not filter by instruction-file paths. The pre-commit hook sets
