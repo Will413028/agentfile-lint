@@ -3,6 +3,13 @@
 All notable changes are listed here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- The GitHub Action (`action.yml`) sets up Python with `actions/setup-python` v7.0.0 instead of v5.6.0.
+  Inputs are unchanged.
+
 ## [0.4.0] - 2026-11-01
 
 The project is renamed from `instruction-lint` to `agentfile-lint`. The name `instruction-lint` is already
