@@ -1,8 +1,9 @@
 """Command line entry point.
 
-Output: one line per finding, `file:line: rule-id: message`. Whole-file findings use line 0 and
-the `:0` is always printed, so the format has exactly one shape. Errors go to stderr, warnings to
-stdout. Exit codes: 0 no errors (warnings allowed), 1 at least one error, 2 usage or config problem.
+Output: every finding on stdout, by default one line each, `file:line: severity: rule-id: message`
+(`file: severity: rule-id: message` for a whole-file finding); `--format json|github` in `finding.py`.
+Usage and config problems go to stderr. Exit codes: 0 no errors (warnings allowed), 1 at least one
+error, 2 usage or config problem.
 """
 from __future__ import annotations
 
@@ -14,7 +15,6 @@ if sys.version_info < (3, 11):  # checked before importing anything that needs t
 
 import argparse
 import datetime
-import json
 import os
 from pathlib import Path
 
@@ -22,6 +22,7 @@ from . import __version__
 from . import config as config_mod
 from . import discover, engine
 from .errors import ConfigError
+from .finding import INPUT_RULE, RENDERERS, dump_json
 from .rules import RULES
 
 
@@ -33,6 +34,8 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--version", action="version", version=f"agentfile-lint {__version__}")
     p.add_argument("--list-rules", action="store_true", help="print the rules and their effective levels, then exit")
     p.add_argument("--warn-as-error", action="store_true", help="treat warnings as errors")
+    p.add_argument("--format", choices=list(RENDERERS), default="text",
+                   help="output format for findings: text (default), json, or github (workflow commands)")
     return p
 
 
@@ -72,7 +75,7 @@ def _config_main(argv: list[str]) -> int:
     except ConfigError as exc:
         sys.stderr.write(f"agentfile-lint: {exc}\n")
         return 2
-    sys.stdout.write(json.dumps(config_mod.to_jsonable(cfg), sort_keys=True, indent=2, ensure_ascii=False) + "\n")
+    sys.stdout.write(dump_json(config_mod.to_jsonable(cfg)))
     return 0
 
 
@@ -116,13 +119,14 @@ def main(argv: list[str] | None = None) -> int:
         for rule_id, module in RULES.items():
             print(f"{rule_id}  {cfg.rules[rule_id]['level']:<5}  {module.NAME}: {module.DESCRIPTION}")
         print("allowlist  error  expired or no-longer-needed allowlist entries; warns before expiry (always on)")
+        print(f"{INPUT_RULE}  error  instruction file is not valid UTF-8; only an allowlist entry can exempt it (always on)")
         return 0
 
-    if args.files and not _relevant(args.files, root, cwd, cfg.globs):
-        return 0
-
-    findings = engine.analyze(root, cfg, today, args.warn_as_error)
-    for f in findings:
-        print(f.format(), file=sys.stderr if f.level == "error" else sys.stdout)
+    findings = []
+    if not args.files or _relevant(args.files, root, cwd, cfg.globs):
+        findings = engine.analyze(root, cfg, today, args.warn_as_error)
+    if hasattr(sys.stdout, "reconfigure"):  # findings quote file text; a cp1252 pipe must not crash
+        sys.stdout.reconfigure(encoding="utf-8")
+    sys.stdout.write(RENDERERS[args.format](findings))  # an irrelevant run still prints valid JSON
     sys.stdout.flush()
     return 1 if any(f.level == "error" for f in findings) else 0

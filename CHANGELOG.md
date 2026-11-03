@@ -5,8 +5,26 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed (breaking)
+
+- Text output: every finding is `file:line: severity: rule-id: message`, with `severity` `error` or
+  `warning`; a finding about a whole file is `file: severity: rule-id: message` (it used to print line
+  `:0`). All findings go to stdout; errors used to go to stderr. Usage and configuration errors (exit
+  2) stay on stderr, and exit codes do not change. A program that parses the text must accept both
+  line shapes; `--format json` is meant for programs (docs/adr/0004).
+- The pseudo rule `input` (an instruction file that is not valid UTF-8) is now `E0`. An allowlist entry
+  may name it; `[rules]` cannot turn it off. `--list-rules` lists it.
+- The GitHub Action runs with `--format github`, so findings appear as annotations; its inputs do not
+  change.
+
 ### Added
 
+- `--format json`: one document, `{"version": 1, "findings": [...]}`, each finding with `file`, `line`
+  (`null` for a whole file), `level` (`error` or `warning`), `rule` and `message`. `version` goes up
+  only when a field is removed or changes meaning.
+- `--format github`: GitHub workflow commands (`::error` / `::warning` with `file`, `line` and `title`),
+  escaped as `actions/toolkit` does; the message is the text-format line, so findings past GitHub's
+  annotation limits still show their location in the log.
 - `docs/field-report.md`: what 0.4.0, 0.5.0 and `preset:strict` report on 22 popular public
   repositories with no config, and what the real problems looked like.
 - `docs/adr/0004-public-exceptions-output-ids.md`: the output format, permanent per-path exceptions,
@@ -14,6 +32,9 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- `check-pins` (experimental) prints its findings on stdout in the text format above
+  (`file:line: error: check-pins: message`) and its summary on stderr; with `--require-refs` and no
+  reference found it prints `check-pins: error: no reference to … found` on stdout (exit 1, as before).
 - `check-pins` is experimental: its output and options may change in any minor release. The README
   and `check-pins --help` mark it "(experimental)"; the upgrade notes in `docs/versioning.md` call it
   optional. `vendor` and `verify.py` stay part of the compatibility contract.

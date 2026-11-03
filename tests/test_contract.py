@@ -2,7 +2,9 @@
 
 Both tools run on the same synthetic git repos. Their outputs are normalised to sets of
 (path, line or 0, kind size|line, measured, limit) and compared, together with exit codes.
-Normalisation is deliberately dumb; if the sets differ, one of the two tools is wrong.
+Normalisation is deliberately dumb; if the sets differ, one of the two tools is wrong. The legacy
+checker prints to stderr; the new one prints every finding to stdout as
+`file:line: severity: rule-id: message` (`file: severity: ...` for a whole-file finding).
 """
 from __future__ import annotations
 
@@ -18,7 +20,7 @@ BLOCK_END = "<!-- END:nextjs-agent-rules -->"
 LEGACY_LINE = re.compile(r"^([^:]+)(?::(\d+))?: (.*)$")
 LEGACY_SIZE = re.compile(r"^(\d+) bytes，上限 (\d+)$")
 LEGACY_LONG = re.compile(r"^一行 (\d+) 字元，上限 (\d+)$")
-NEW_LINE = re.compile(r"^([^:]+):(\d+): (R1): (.*)$")
+NEW_LINE = re.compile(r"^([^:]+)(?::(\d+))?: (error|warning): ([A-Za-z0-9-]+): (.*)$")
 NEW_SIZE = re.compile(r"^file is (\d+) bytes, limit (\d+)$")
 NEW_LONG = re.compile(r"^line is (\d+) characters, limit (\d+)$")
 
@@ -48,12 +50,17 @@ def normalise_legacy(stderr: str) -> set[tuple]:
     return out
 
 
-def normalise_new(stderr: str) -> set[tuple]:
+def normalise_new(stdout: str) -> set[tuple]:
+    """R1 errors only: the legacy checker had no other rule, and the shared stdout also carries the
+    R5 warnings the tier files trigger (the legacy comparison read errors from stderr before 0.6.0)."""
     out = set()
-    for raw in stderr.splitlines():
+    for raw in stdout.splitlines():
         m = NEW_LINE.match(raw)
         assert m, f"unparsable new line: {raw!r}"
-        path, line, msg = m.group(1), int(m.group(2)), m.group(4)
+        path, line, severity, rule, msg = m.group(1), int(m.group(2) or 0), m.group(3), m.group(4), m.group(5)
+        if rule != "R1":
+            continue
+        assert severity == "error", f"R1 is at error in the fixture: {raw!r}"
         if s := NEW_SIZE.match(msg):
             out.add((path, line, "size", int(s.group(1)), int(s.group(2))))
         elif s := NEW_LONG.match(msg):
@@ -122,9 +129,10 @@ class ContractTest(unittest.TestCase):
                 root = helpers.make_repo(files)
                 old = helpers.run_legacy(root)
                 new = helpers.run_new(root, "--config", str(helpers.HAWKR_LIMITS))
-                old_set, new_set = normalise_legacy(old.stderr), normalise_new(new.stderr)
+                old_set, new_set = normalise_legacy(old.stderr), normalise_new(new.stdout)
                 self.assertEqual(len(old_set), expected, f"legacy found unexpected count\n{old.stderr}")
-                self.assertEqual(old_set, new_set, f"\nlegacy:\n{old.stderr}\nnew:\n{new.stderr}")
+                self.assertEqual(new.stderr, "", "findings go to stdout only")
+                self.assertEqual(old_set, new_set, f"\nlegacy:\n{old.stderr}\nnew:\n{new.stdout}")
                 self.assertEqual(old.returncode, new.returncode)
                 self.assertEqual(new.returncode, 1 if expected else 0)
 

@@ -5,12 +5,14 @@ import helpers
 
 
 def lint(files, config="", *args):
-    """Run the tool in a temp git repo; returns (exit code, stdout lines, stderr lines)."""
+    """Run the tool in a temp git repo; returns (exit code, warning lines, error lines). The error
+    lines end with stderr (usage and config problems); findings come only from stdout."""
     files = dict(files)
     if config:
         files[".agentfile-lint.toml"] = config
     r = helpers.run_new(helpers.make_repo(files), "--today", "2026-06-01", *args)
-    return r.returncode, r.stdout.splitlines(), r.stderr.splitlines()
+    warnings, errors = helpers.by_severity(r)
+    return r.returncode, warnings, errors + r.stderr.splitlines()
 
 
 def only(rule, lines):
@@ -45,7 +47,7 @@ must_match = ['docs/spec']
     def test_missing_section(self):
         rc, _, err = self.run_one(self.GOOD.replace("## Data\n\ny\n", ""))
         self.assertEqual(rc, 1)
-        self.assertIn('mod/a/AGENTS.md:0: R2: missing section "Data"', err)
+        self.assertIn('mod/a/AGENTS.md: error: R2: missing section "Data"', err)
 
     def test_unexpected_section(self):
         rc, _, err = self.run_one(self.GOOD.replace("## Data", "## Data\n\ny\n\n## Extra"))
@@ -107,8 +109,8 @@ class TestNamesTest(unittest.TestCase):  # R3a
         files = dict(self.FILES, **{"AGENTS.md": "ok\nGuard: `TestMissing`.\nAlso `test_nope`.\n"})
         rc, _, err = lint(files, self.CFG)
         self.assertEqual(rc, 1)
-        self.assertIn("AGENTS.md:2: R3a: test `TestMissing` is not defined in any searched test file", err)
-        self.assertIn("AGENTS.md:3: R3a: test `test_nope` is not defined in any searched test file", err)
+        self.assertIn("AGENTS.md:2: error: R3a: test `TestMissing` is not defined in any searched test file", err)
+        self.assertIn("AGENTS.md:3: error: R3a: test `test_nope` is not defined in any searched test file", err)
 
     def test_other_words_in_backticks_and_code_fences_are_ignored(self):
         text = "Use `Testing` and `TestFoo/sub`.\n```\n`TestFenced`\n```\n"
@@ -147,7 +149,7 @@ ignore_negated_words = ["no longer"]
     def test_missing_path_fails(self):
         rc, _, err = self.run_one("see `lib/gone.go` here\n")
         self.assertEqual(rc, 1)
-        self.assertTrue(any(line.startswith("sub/AGENTS.md:1: R3b: path `lib/gone.go` not found") for line in err), err)
+        self.assertTrue(any(line.startswith("sub/AGENTS.md:1: error: R3b: path `lib/gone.go` not found") for line in err), err)
 
     def test_skips_non_paths_urls_placeholders_and_ignored_lines(self):
         text = ("`https://x.example/a/b` `src/<name>/x.go` `a/*.go` `cmd --flag/x` `node_modules/p/x.js` `.env.local`\n"
@@ -199,7 +201,7 @@ spec = "docs/{1}.md"
     def test_missing_section_fails(self):
         rc, _, err = self.run_one("ok\nSee §9.\n")
         self.assertEqual(rc, 1)
-        self.assertIn("mod/a/AGENTS.md:2: R3c: §9 has no matching heading in docs/a.md", err)
+        self.assertIn("mod/a/AGENTS.md:2: error: R3c: §9 has no matching heading in docs/a.md", err)
 
     def test_missing_spec_file_is_reported_once_per_file(self):
         rc, _, err = self.run_one("§1 §2\n", spec=None)
@@ -224,8 +226,8 @@ class RotTest(unittest.TestCase):  # R4
         rc, _, err = lint({"AGENTS.md": text}, self.CFG)
         self.assertEqual(rc, 1)
         got = only("R4", err)
-        self.assertTrue(any(line.startswith("AGENTS.md:2: R4: date '2026-10-31'") for line in got), got)
-        self.assertTrue(any(line.startswith("AGENTS.md:3: R4: issue reference '#123'") for line in got), got)
+        self.assertTrue(any(line.startswith("AGENTS.md:2: error: R4: date '2026-10-31'") for line in got), got)
+        self.assertTrue(any(line.startswith("AGENTS.md:3: error: R4: issue reference '#123'") for line in got), got)
         self.assertTrue(any("'issue 45'" in line for line in got), got)
         self.assertTrue(any("'PR 7'" in line for line in got), got)
 
@@ -269,7 +271,7 @@ class DuplicateTest(unittest.TestCase):  # R5
         self.assertEqual(rc, 1)
         got = only("R5", err)
         self.assertEqual(len(got), 1, got)
-        self.assertTrue(got[0].startswith("sub/AGENTS.md:3: R5: line repeats AGENTS.md:2"), got)
+        self.assertTrue(got[0].startswith("sub/AGENTS.md:3: error: R5: line repeats AGENTS.md:2"), got)
         self.assertEqual(only("R5", out), [])
 
     def test_sibling_duplicate_is_a_warning_on_both(self):
@@ -290,7 +292,7 @@ class DuplicateTest(unittest.TestCase):  # R5
                  "docs/CLAUDE.md": self.LINE, "a/AGENTS.md": "a\n" + self.LINE}
         rc, out, err = lint(files)
         self.assertEqual(rc, 0)
-        got = sorted(line.split(": R5: ")[0] + " " + line.split("line repeats ")[1].split(" ")[0]
+        got = sorted(line.split(": warning: R5: ")[0] + " " + line.split("line repeats ")[1].split(" ")[0]
                      for line in only("R5", out) if "line repeats" in line)
         self.assertEqual(got, ["a/AGENTS.md:2 AGENTS.md:1", "docs/CLAUDE.md:1 CLAUDE.md:1", "sub/AGENTS.md:1 AGENTS.md:1"])
         self.assertEqual(only("R5", out + err), [x for x in only("R5", out) if "line repeats" in x])  # no sibling lines
@@ -308,12 +310,12 @@ class DuplicateTest(unittest.TestCase):  # R5
         files = {"AGENTS.md": self.LINE, "CLAUDE.md": self.LINE, "sub/CLAUDE.md": self.LINE}
         rc, _, err = lint(files, self.CFG + 'ancestor_pairs = "any"\n')
         self.assertEqual(rc, 1)
-        self.assertEqual(sorted(x.split(": R5: ")[0] for x in only("R5", err)), ["CLAUDE.md:1", "sub/CLAUDE.md:1"])
+        self.assertEqual(sorted(x.split(": error: R5: ")[0] for x in only("R5", err)), ["CLAUDE.md:1", "sub/CLAUDE.md:1"])
 
     def test_strict_compares_any_pairs(self):
         files = {"AGENTS.md": self.LINE, "CLAUDE.md": self.LINE}
         rc, out, _ = lint(files, 'extends = ["preset:strict"]\n')
-        self.assertTrue([x for x in only("R5", out) if x.startswith("CLAUDE.md:1: R5: line repeats AGENTS.md:1")], out)
+        self.assertTrue([x for x in only("R5", out) if x.startswith("CLAUDE.md:1: warning: R5: line repeats AGENTS.md:1")], out)
 
     def test_bad_ancestor_pairs_fails(self):
         rc, _, err = lint({"AGENTS.md": "ok\n"}, self.CFG + 'ancestor_pairs = "same"\n')
@@ -357,7 +359,7 @@ class ClaudeMdTest(unittest.TestCase):  # C1
     def test_import_only_rejects_other_content(self):
         rc, _, err = lint({"AGENTS.md": "ok\n", "CLAUDE.md": "@AGENTS.md\nextra\n"}, '[rules.C1]\nlevel = "error"\n')
         self.assertEqual(rc, 1)
-        self.assertIn("CLAUDE.md:0: C1: CLAUDE.md must contain only the line '@AGENTS.md'", err)
+        self.assertIn("CLAUDE.md: error: C1: CLAUDE.md must contain only the line '@AGENTS.md'", err)
 
     def test_import_only_requires_the_sibling_agents_md(self):
         rc, _, err = lint({"AGENTS.md": "ok\n", "sub/CLAUDE.md": "@AGENTS.md\n"}, '[rules.C1]\nlevel = "error"\n')

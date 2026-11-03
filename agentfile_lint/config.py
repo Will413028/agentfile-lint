@@ -14,6 +14,7 @@ from typing import Any
 
 from . import allowlist
 from .errors import LEVELS, ConfigError, check_keys, expect_int, expect_str, expect_str_list
+from .finding import INPUT_RULE
 from .rules import RULES
 
 CONFIG_NAME = ".agentfile-lint.toml"
@@ -159,7 +160,8 @@ def _validate(raw: dict[str, Any], today: datetime.date) -> Config:
             raise ConfigError(f"rules.{rule_id}.level: expected one of {', '.join(LEVELS)}")
         rules[rule_id] = module.validate(params)
 
-    entries = allowlist.parse(al.get("entries", []), settings, set(RULES), today)
+    # E0 has no `[rules]` table (it cannot be turned off), but an allowlist entry may name it.
+    entries = allowlist.parse(al.get("entries", []), settings, set(RULES) | {INPUT_RULE}, today)
     pins = raw.get("check_pins", {})
     check_keys(pins, set(PIN_DEFAULTS), "check_pins")
     pins = {

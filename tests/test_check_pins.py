@@ -44,19 +44,19 @@ class CheckPinsTest(unittest.TestCase):
             ".github/workflows/ci.yml": WORKFLOW.format(c="c" * 40, sha=SHA_A),
         }
         rc, out, err = check(files)
-        self.assertEqual((rc, err), (0, ""))
-        self.assertIn(f"3 reference(s) to 'agentfile-lint', all pinned to {SHA_A}", out)
+        self.assertEqual((rc, out), (0, ""))  # stdout holds findings only; the summary is on stderr
+        self.assertIn(f"3 reference(s) to 'agentfile-lint', all pinned to {SHA_A}", err)
 
     def test_two_different_shas_fail_with_file_and_line(self):
         files = {
             ".pre-commit-config.yaml": PRECOMMIT.format(rev=SHA_A),
             ".github/workflows/ci.yml": WORKFLOW.format(c="c" * 40, sha=SHA_B),
         }
-        rc, _, err = check(files)
-        self.assertEqual(rc, 1)
+        rc, out, err = check(files)
+        self.assertEqual((rc, err), (1, ""))
         self.assertEqual(
-            err.splitlines(),
-            [f".pre-commit-config.yaml:7: check-pins: pinned to {SHA_A}, but .github/workflows/ci.yml:5 pins {SHA_B}"],
+            out.splitlines(),
+            [f".pre-commit-config.yaml:7: error: check-pins: pinned to {SHA_A}, but .github/workflows/ci.yml:5 pins {SHA_B}"],
         )
 
     def test_lefthook_and_workflow_mismatch_fails(self):
@@ -65,30 +65,31 @@ class CheckPinsTest(unittest.TestCase):
 
     def test_tag_branch_and_short_sha_are_rejected(self):
         for ref in ("v0.2.0", "main", "a" * 7, "A" * 40, "a" * 41):
-            rc, _, err = check({".pre-commit-config.yaml": PRECOMMIT.format(rev=ref)})
+            rc, out, _ = check({".pre-commit-config.yaml": PRECOMMIT.format(rev=ref)})
             self.assertEqual(rc, 1, ref)
-            self.assertIn(".pre-commit-config.yaml:7: check-pins: reference is pinned to", err)
+            self.assertIn(".pre-commit-config.yaml:7: error: check-pins: reference is pinned to", out)
 
     def test_missing_rev_and_unpinned_references_fail(self):
-        rc, _, err = check({".pre-commit-config.yaml": f"repos:\n  - repo: {URL}\n    hooks: []\n"})
+        rc, out, _ = check({".pre-commit-config.yaml": f"repos:\n  - repo: {URL}\n    hooks: []\n"})
         self.assertEqual(rc, 1)
-        self.assertIn("pinned to '(none)'", err)
+        self.assertIn(".pre-commit-config.yaml:2: error: check-pins: reference is pinned to '(none)'", out)
         rc, _, err = check({"lefthook.yml": f"run: uvx --from git+{URL} agentfile-lint\n"})
         self.assertEqual(rc, 1)
 
     def test_plain_mentions_are_not_references(self):
         files = {"lefthook.yml": "pre-commit:\n  commands:\n    agentfile-lint:\n      run: agentfile-lint\n"}
         rc, out, err = check(files)
-        self.assertEqual((rc, err), (0, ""))
-        self.assertIn("no reference", out)
-        self.assertEqual(check(files, "--require-refs")[0], 1)
+        self.assertEqual((rc, out), (0, ""))
+        self.assertIn("no reference", err)
+        rc, out, err = check(files, "--require-refs")
+        self.assertEqual((rc, out, err), (1, "check-pins: error: no reference to 'agentfile-lint' found\n", ""))
 
     def test_repo_string_is_configurable(self):
         files = {".pre-commit-config.yaml": PRECOMMIT.format(rev=SHA_A).replace("example/agentfile-lint", "acme/linter")}
-        self.assertIn("no reference", check(files)[1])
-        rc, out, _ = check(files, "--repo", "acme/linter")
+        self.assertIn("no reference", check(files)[2])
+        rc, _, err = check(files, "--repo", "acme/linter")
         self.assertEqual(rc, 0)
-        self.assertIn("1 reference(s)", out)
+        self.assertIn("1 reference(s)", err)
 
     def test_repo_string_and_files_come_from_the_config(self):
         files = {
@@ -96,9 +97,9 @@ class CheckPinsTest(unittest.TestCase):
             "tools/hooks.yml": f"run: uvx --from git+https://host/acme/linter@{SHA_A} x\n",
             "lefthook.yml": f"run: uvx --from git+https://host/acme/linter@{SHA_B} x\n",
         }
-        rc, out, _ = check(files)
+        rc, _, err = check(files)
         self.assertEqual(rc, 0)  # lefthook.yml is outside the configured files
-        self.assertIn("1 reference(s)", out)
+        self.assertIn("1 reference(s)", err)
 
     def test_quoted_rev_is_read(self):
         rc, out, _ = check({".pre-commit-config.yaml": PRECOMMIT.format(rev=f"'{SHA_A}'")})

@@ -28,8 +28,8 @@ class AllowlistTest(unittest.TestCase):
     def test_expired_entry_fails_and_does_not_suppress(self):
         r = run({"AGENTS.md": BIG}, entry(expires="2026-05-31"))  # yesterday
         self.assertEqual(r.returncode, 1)
-        self.assertIn("AGENTS.md:0: allowlist: entry for R1 expired on 2026-05-31", r.stderr)
-        self.assertIn("AGENTS.md:1: R1: line is 600 characters, limit 500", r.stderr)
+        self.assertIn("AGENTS.md: error: allowlist: entry for R1 expired on 2026-05-31", r.stdout)
+        self.assertIn("AGENTS.md:1: error: R1: line is 600 characters, limit 500", r.stdout)
 
     def test_entry_expiring_today_is_still_live(self):
         r = run({"AGENTS.md": BIG}, entry(expires="2026-06-01"))
@@ -39,12 +39,12 @@ class AllowlistTest(unittest.TestCase):
     def test_unneeded_entry_fails_when_file_is_clean(self):
         r = run({"AGENTS.md": "fine\n"}, entry(expires="2026-08-01"))
         self.assertEqual(r.returncode, 1)
-        self.assertIn("allowlist: entry for R1 is no longer needed", r.stderr)
+        self.assertIn("AGENTS.md: error: allowlist: entry for R1 is no longer needed", r.stdout)
 
     def test_unneeded_entry_fails_when_file_is_missing(self):
         r = run({"AGENTS.md": "fine\n"}, entry(path="gone/AGENTS.md", expires="2026-08-01"))
         self.assertEqual(r.returncode, 1)
-        self.assertIn("gone/AGENTS.md:0: allowlist: entry for R1 is no longer needed", r.stderr)
+        self.assertIn("gone/AGENTS.md: error: allowlist: entry for R1 is no longer needed", r.stdout)
 
     def test_expiry_beyond_max_days_is_a_config_failure(self):
         r = run({"AGENTS.md": BIG}, entry(expires="2026-09-30"))  # 121 days
@@ -71,7 +71,7 @@ class AllowlistTest(unittest.TestCase):
     def test_warns_within_14_days_of_expiry(self):
         r = run({"AGENTS.md": BIG}, entry(expires="2026-06-15"))
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn("AGENTS.md:0: allowlist: entry for R1 expires in 14 days", r.stdout)
+        self.assertIn("AGENTS.md: warning: allowlist: entry for R1 expires in 14 days", r.stdout)
 
     def test_no_warning_at_15_days(self):
         r = run({"AGENTS.md": BIG}, entry(expires="2026-06-16"))
