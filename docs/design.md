@@ -43,7 +43,8 @@ Files are `git ls-files` entries matching `discover.globs` (default `AGENTS.md`,
 `CLAUDE.md`, `**/CLAUDE.md`), never a file ending in `.local.md`, skipping files deleted in the
 working tree. Two discovered paths in the same directory that are the same file (for example
 `CLAUDE.md -> AGENTS.md`) are one file under two names, each loaded by a different agent: only the
-non-symlink path is analyzed, so no rule reports the same text twice. The same file in another
+non-symlink path is analyzed (the first in sort order when all are symlinks), so no rule reports the
+same text twice. The same file in another
 directory is a separate load location and is analyzed on its own; when it sits in an ancestor or
 descendant directory, an agent working there loads both, and R5 reports the repeated lines. A
 symlink to a file outside the discovered set is analyzed as its own file; a dangling one is skipped.

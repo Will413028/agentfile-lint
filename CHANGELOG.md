@@ -5,22 +5,25 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed (breaking)
+
+- An allowlist entry whose `path` is a same-directory symlink (see Fixed) now fails as "no longer
+  needed" (exit code 1), because that path is analyzed under its target. Remove the entry, or move it to
+  the target path if the target still violates the rule.
+
 ### Changed
 
 - The GitHub Action (`action.yml`) sets up Python with `actions/setup-python` v7.0.0 instead of v5.6.0.
   Inputs are unchanged.
-- Because of the symlink fix below, an allowlist entry whose `path` is such a same-directory symlink now fails as
-  "no longer needed". Remove the entry, or move it to the target path if the target still violates the
-  rule.
 
 ### Fixed
 
 - Two tracked instruction files in the same directory that are the same file (for example
-  `CLAUDE.md -> AGENTS.md`) are now analyzed once, under the non-symlink path. Before, every rule
-  checked the file again under its second name: R1 and R4 reported each problem twice, and R5 reported
-  the file as a duplicate of itself. A symlink to a file in another directory is still analyzed as its
-  own file, because it is a separate place an agent loads; in an ancestor or descendant directory R5
-  reports the repeated lines.
+  `CLAUDE.md -> AGENTS.md`) are now analyzed once, under the non-symlink path (the first in sort order
+  when all are symlinks). Before, every rule checked the file again under its second name: R1 and R4
+  reported each problem twice, and R5 reported the file as a duplicate of itself. A symlink to a file
+  in another directory is still analyzed as its own file, because it is a separate place an agent
+  loads; in an ancestor or descendant directory R5 reports the repeated lines.
 - C1 (`import-only`) accepts a `CLAUDE.md` that is a symlink to the `AGENTS.md` next to it, as it
   accepts the `@AGENTS.md` import line. `forbid` still reports a symlinked `CLAUDE.md`.
 
