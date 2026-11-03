@@ -5,6 +5,11 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `docs/field-report.md`: what 0.4.0, 0.5.0 and `preset:strict` report on 22 popular public
+  repositories with no config, and what the real problems looked like.
+
 ## [0.5.0] - 2026-11-03
 
 ### Changed (breaking)

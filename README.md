@@ -54,7 +54,8 @@ services/api/AGENTS.md:5: R6: possible copied constant '`MAX_RETRIES = 5`'; poin
 
 Every rule except `R1` ships at `warn` or `off`; raise a rule to `error` in your own config once it is
 clean. Why each rule exists, where its default comes from and its measured false-positive rate:
-[`docs/rules.md`](docs/rules.md).
+[`docs/rules.md`](docs/rules.md). What it found on 22 popular public repositories with no config, and
+how that changed from 0.4.0: [`docs/field-report.md`](docs/field-report.md).
 
 ### Other instruction files
 
