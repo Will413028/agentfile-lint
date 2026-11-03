@@ -21,8 +21,9 @@ locally and in CI does.
 - No LLM in the gate (non-deterministic, paid, and the checked text is untrusted input).
 - Not a Markdown style linter; it knows instruction-file semantics (tiers, budgets), not prose style.
 - Untracked local instruction files (`*.local.md`) are out of scope; CI cannot see them.
-- Not published to a package index. Distribution is a git repository (pre-commit hook, composite
-  action, `uvx --from git+...`) and, later, a pinned vendored copy for restricted environments (see Vendored copy).
+- No distribution channel the runner depends on. It ships as a git repository (pre-commit hook,
+  composite action), a PyPI package (`uvx agentfile-lint`) and a pinned vendored copy for restricted
+  environments (see Vendored copy); consumers pin a version or a full commit SHA.
 
 ## Model
 

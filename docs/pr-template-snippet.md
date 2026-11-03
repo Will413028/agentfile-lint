@@ -20,3 +20,4 @@ Notes for adopters:
 - Link a tag or full SHA, not a branch, so the rubric the author used is the rubric the reviewer sees.
 - A repository that vendors the tool can copy `rubric.md` next to the vendored copy instead of linking it.
 - The checkbox is a prompt for a human, not a gate. If a gate is wanted, use a rule in the config.
+- What each rule checks and how often it is wrong: [rules.md](rules.md) (link the same tag or SHA).

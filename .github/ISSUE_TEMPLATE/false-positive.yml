@@ -1,0 +1,44 @@
+name: False positive
+description: A finding that reports a problem where there is none.
+labels: [false-positive]
+body:
+  - type: markdown
+    attributes:
+      value: These reports feed the measured false-positive rates in docs/rules.md.
+  - type: input
+    id: rule
+    attributes:
+      label: Rule
+      placeholder: R5
+    validations:
+      required: true
+  - type: dropdown
+    id: preset
+    attributes:
+      label: Preset
+      options:
+        - default (no config)
+        - preset:strict
+        - my own config
+    validations:
+      required: true
+  - type: textarea
+    id: finding
+    attributes:
+      label: The reported line
+      description: The output line, and the line of the instruction file it points to.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it is fine
+      description: For example a deliberate copy, an example path, a citation.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `agentfile-lint --version`, or the commit SHA you run.

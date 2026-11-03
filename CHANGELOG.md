@@ -28,6 +28,11 @@ versions follow [Semantic Versioning](https://semver.org/).
 - `preset:strict` (`extends = ["preset:strict"]`): the default preset plus R3b, R4, R6 and C1 at
   `warn`, and R5 on any pair (`ancestor_pairs = "any"`) and between siblings at `warn`: the 0.4.0
   defaults, except R1.
+- `docs/rules.md`: for each rule, why a finding is a problem, the source of its default, whether it is
+  in the default preset or `preset:strict`, and its measured false-positive rate with a Wilson 95%
+  interval. The README opens with a zero-config run, a `preset:strict` run, an example of adding other
+  instruction files and a comparison with similar tools. `CONTRIBUTING.md` and issue templates (bug,
+  false positive, rule proposal).
 
 ### Changed
 

@@ -1,0 +1,32 @@
+name: Rule proposal
+description: A new check for agent instruction files.
+labels: [rule-proposal]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What goes wrong
+      description: What an agent does wrong, or what drifts, when an instruction file has this problem.
+    validations:
+      required: true
+  - type: textarea
+    id: catch
+    attributes:
+      label: Lines it should report
+      description: Real examples (anonymize if needed).
+      render: markdown
+    validations:
+      required: true
+  - type: textarea
+    id: ignore
+    attributes:
+      label: Lines it must not report
+      description: Similar lines that are fine. This decides whether the rule can be objective or belongs in preset:strict.
+      render: markdown
+    validations:
+      required: true
+  - type: textarea
+    id: source
+    attributes:
+      label: Source
+      description: Documentation of an agent or a tool that states the limit or behavior, if any.
