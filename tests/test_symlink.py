@@ -1,4 +1,5 @@
 """Symlinked instruction files (e.g. CLAUDE.md -> AGENTS.md) are aliases of their target, not copies."""
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -27,9 +28,16 @@ class SymlinkAliasTest(unittest.TestCase):
         self.assertEqual(on("CLAUDE.md", lines), [])                       # no R1, R5 or C1 on the alias
         self.assertEqual(len([x for x in on("AGENTS.md", lines) if ": R1: " in x]), 2)  # target still checked once
 
-    def test_nested_symlink_to_parent_file_is_an_alias(self):
+    def test_nested_symlink_to_an_ancestor_file_is_checked_as_its_own_file(self):
+        # An agent working in sub/ loads both files, so the repeated lines are real duplicates.
         _, lines = lint({"AGENTS.md": LONG}, {"sub/AGENTS.md": "../AGENTS.md"})
-        self.assertEqual(on("sub/AGENTS.md", lines), [])
+        self.assertTrue([x for x in on("sub/AGENTS.md", lines) if ": R5: line repeats AGENTS.md:" in x])
+
+    def test_symlinks_in_sibling_directories_keep_the_shallowest_path(self):
+        files = {"docs/shared.md": LONG}
+        _, lines = lint(files, {"z/AGENTS.md": "../docs/shared.md", "a/b/AGENTS.md": "../../docs/shared.md"})
+        self.assertTrue([x for x in on("z/AGENTS.md", lines) if ": R1: " in x])  # the shallow path is checked
+        self.assertEqual(on("a/b/AGENTS.md", lines), [])  # sorts first, but deeper
 
     def test_agents_md_symlink_to_claude_md_checks_claude_md_as_the_real_file(self):
         _, lines = lint({"CLAUDE.md": LONG}, {"AGENTS.md": "CLAUDE.md"}, '[rules.C1]\nlevel = "error"\n')
@@ -41,7 +49,9 @@ class SymlinkAliasTest(unittest.TestCase):
         self.assertEqual([x for x in lines if ": C1: " in x], ["CLAUDE.md:0: C1: CLAUDE.md must not exist (mode forbid); keep the instructions in AGENTS.md"])
 
     def test_symlink_to_a_file_outside_the_repo_is_checked_as_its_own_file(self):
-        outside = Path(tempfile.mkdtemp(prefix="il-outside-")) / "shared.md"
+        tmp = Path(tempfile.mkdtemp(prefix="il-outside-"))
+        self.addCleanup(shutil.rmtree, tmp)
+        outside = tmp / "shared.md"
         outside.write_text(LONG, encoding="utf-8")
         _, lines = lint({}, {"AGENTS.md": str(outside)})
         self.assertEqual(len([x for x in on("AGENTS.md", lines) if ": R1: " in x]), 2)
@@ -49,6 +59,23 @@ class SymlinkAliasTest(unittest.TestCase):
     def test_dangling_symlink_is_skipped(self):
         rc, lines = lint({"AGENTS.md": "ok\n"}, {"CLAUDE.md": "missing.md"})
         self.assertEqual((rc, on("CLAUDE.md", lines)), (0, []))
+
+    def test_symlink_loop_next_to_claude_md_does_not_crash(self):
+        rc, lines = lint({"real.md": "ok\n"}, {"CLAUDE.md": "real.md", "AGENTS.md": "AGENTS.md"}, '[rules.C1]\nlevel = "error"\n')
+        self.assertNotIn("Traceback (most recent call last):", lines)
+        self.assertEqual(rc, 1)
+        self.assertIn("CLAUDE.md:0: C1: CLAUDE.md must contain only the line '@AGENTS.md'", lines)
+
+    def test_link_name_in_other_case_is_never_checked_twice(self):
+        # Case-insensitive file system: an alias of AGENTS.md. Case-sensitive: a dangling link, skipped.
+        rc, lines = lint({"AGENTS.md": "ok\n"}, {"CLAUDE.md": "agents.md"}, '[rules.C1]\nlevel = "error"\n')
+        self.assertEqual((rc, on("CLAUDE.md", lines)), (0, []))
+
+    def test_allowlist_entry_for_an_alias_is_no_longer_needed(self):
+        entry = '[[allowlist.entries]]\nrule = "R1"\npath = "CLAUDE.md"\nreason = "split later"\nexpires = 2026-06-30\n'
+        rc, lines = lint({"AGENTS.md": LONG}, {"CLAUDE.md": "AGENTS.md"}, entry)
+        self.assertEqual(rc, 1)
+        self.assertIn("is no longer needed (file is not an analyzed instruction file)", "\n".join(on("CLAUDE.md", lines)))
 
 
 if __name__ == "__main__":
