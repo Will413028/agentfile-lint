@@ -75,7 +75,9 @@ Its output and options may change in a minor release (see Versions).
 `agentfile-lint check-pins [--repo STRING] [--files GLOB ...] [--require-refs]` scans tracked
 files (default: `.pre-commit-config.yaml`, `lefthook.y*ml`, `.github/workflows/*.y*ml`) for
 references to this tool and fails when a reference is not a full 40-hex SHA or when two
-references pin different SHAs. Output is `file:line: check-pins: message` on stderr, exit 1.
+references pin different SHAs. Findings are printed on stdout as `file:line: error: check-pins: message`
+(exit 1) and the summary on stderr; with `--require-refs` and no reference found it prints
+`check-pins: error: no reference to … found` on stdout and exits 1.
 `[check_pins]` in the config sets `repo` and `files`. It reads lines, not YAML: anchors,
 multi-line values and `${{ }}` expressions are not understood (an expression is reported as a non-SHA).
 It checks consistency among the references it finds; it cannot prove it found all of them.

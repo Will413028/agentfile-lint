@@ -9,34 +9,38 @@ and `CLAUDE.md` today; `SKILL.md`, hooks and MCP config are next if it proves us
 uvx agentfile-lint        # in any git repository; no config needed
 ```
 
+Status: PyPI has 0.5.0, which prints the older output format (no severity in the line, errors on
+stderr). The output below is from `dev` (changes listed in the CHANGELOG under Unreleased); until the
+next release, run it with `uvx --from git+https://github.com/Will413028/agentfile-lint@dev agentfile-lint`.
+
 With no config it runs only checks whose findings are facts. From a demo repository:
 
 ```text
 $ uvx agentfile-lint
-services/api/AGENTS.md:0: R1: file and its ancestors (AGENTS.md) total 34618 bytes, limit 32768
-AGENTS.md:0: R1: file is 211 lines, limit 200
-AGENTS.md:9: R3a: test `test_login_redirects` is not defined in any searched test file
-services/api/AGENTS.md:3: R5: line repeats AGENTS.md:8 ('Never edit generated files under `gen/`; change the schem...'); keep it in the ancestor only
+AGENTS.md: warning: R1: file is 211 lines, limit 200
+AGENTS.md:9: warning: R3a: test `test_login_redirects` is not defined in any searched test file
+services/api/AGENTS.md: error: R1: file and its ancestors (AGENTS.md) total 34618 bytes, limit 32768
+services/api/AGENTS.md:3: warning: R5: line repeats AGENTS.md:8 ('Never edit generated files under `gen/`; change the schem...'); keep it in the ancestor only
 $ echo $?
 1
 ```
 
-Codex stops reading `AGENTS.md` files on a path once they total 32 KiB (its default), so the first line is an error;
-the others are warnings. `extends = ["preset:strict"]` in `.agentfile-lint.toml` adds the heuristic
-rules, which guess and are wrong more often (rates in [`docs/rules.md`](docs/rules.md)). Same
-repository:
+Codex stops reading `AGENTS.md` files on a path once they total 32 KiB (its default), so the total for
+`services/api/AGENTS.md` is an error; the others are warnings. `extends = ["preset:strict"]` in
+`.agentfile-lint.toml` adds the heuristic rules, which guess and are wrong more often (rates in
+[`docs/rules.md`](docs/rules.md)). Same repository:
 
 ```text
 $ printf 'extends = ["preset:strict"]\n' > .agentfile-lint.toml
 $ uvx agentfile-lint
-services/api/AGENTS.md:0: R1: file and its ancestors (AGENTS.md) total 34618 bytes, limit 32768
-AGENTS.md:0: R1: file is 211 lines, limit 200
-AGENTS.md:9: R3a: test `test_login_redirects` is not defined in any searched test file
-CLAUDE.md:0: C1: CLAUDE.md must contain only the line '@AGENTS.md'
-services/api/AGENTS.md:3: R5: line repeats AGENTS.md:8 ('Never edit generated files under `gen/`; change the schem...'); keep it in the ancestor only
-services/api/AGENTS.md:4: R3b: path `src/legacy/router.py` not found from this file's directory, its ancestors, the repo root or base_dirs
-services/api/AGENTS.md:5: R4: narrative word 'currently'; describe the current rule, not its history
-services/api/AGENTS.md:5: R6: possible copied constant '`MAX_RETRIES = 5`'; point to the code instead of repeating the value
+AGENTS.md: warning: R1: file is 211 lines, limit 200
+AGENTS.md:9: warning: R3a: test `test_login_redirects` is not defined in any searched test file
+CLAUDE.md: warning: C1: CLAUDE.md must contain only the line '@AGENTS.md'
+services/api/AGENTS.md: error: R1: file and its ancestors (AGENTS.md) total 34618 bytes, limit 32768
+services/api/AGENTS.md:3: warning: R5: line repeats AGENTS.md:8 ('Never edit generated files under `gen/`; change the schem...'); keep it in the ancestor only
+services/api/AGENTS.md:4: warning: R3b: path `src/legacy/router.py` not found from this file's directory, its ancestors, the repo root or base_dirs
+services/api/AGENTS.md:5: warning: R4: narrative word 'currently'; describe the current rule, not its history
+services/api/AGENTS.md:5: warning: R6: possible copied constant '`MAX_RETRIES = 5`'; point to the code instead of repeating the value
 ```
 
 | Rule | Default | `preset:strict` | What it checks |
@@ -87,7 +91,7 @@ documented" means the documentation does not say, not that the feature is missin
 | Duplicates between files | identical lines in a file and its ancestors | not documented | duplicate content across files | duplicate content; across files not documented |
 | Auto-fix | no | yes | broken paths | yes |
 | Editor | no | LSP, IDE plugins | LSP | no |
-| Output | `file:line: rule-id: message`, exit 0/1/2 | GitHub, JSON, SARIF | text, JSON, SARIF; exit 0/1/2 | GitHub; 0-100 score |
+| Output | `file:line: severity: rule-id: message`, JSON, GitHub; exit 0/1/2 | GitHub, JSON, SARIF | text, JSON, SARIF; exit 0/1/2 | GitHub; 0-100 score |
 
 Choose agnix for breadth (many file types, IDE plugins, auto-fix). Choose agentfile-lint to run one
 small, pinned set of rules across many repositories: exceptions expire, the checker can be vendored
@@ -101,6 +105,7 @@ agentfile-lint --list-rules          # rules and their effective levels
 agentfile-lint --today 2026-01-31    # replace the current date (reproducible runs)
 agentfile-lint --config path.toml    # explicit config instead of .agentfile-lint.toml
 agentfile-lint --warn-as-error
+agentfile-lint --format json         # or github (workflow commands); default text
 ```
 
 Other commands:
@@ -114,9 +119,12 @@ agentfile-lint vendor --to DIR       # a pinned, self-contained copy (see below)
 Experimental commands may change their output and options in any minor release; everything else
 follows [`docs/versioning.md`](docs/versioning.md).
 
-Output is one line per finding: `file:line: rule-id: message`. Findings about a whole file use
-line `0` (printed as `:0`). Errors go to stderr, warnings to stdout. Exit codes: `0` no errors,
-`1` at least one error, `2` usage or configuration problem.
+Findings go to stdout, one line each: `file:line: severity: rule-id: message`, where `severity` is
+`error` or `warning`; a finding about a whole file has no line: `file: severity: rule-id: message`.
+`--format json` prints one document, `{"version": 1, "findings": [...]}`, each finding with `file`,
+`line` (`null` for a whole file), `level`, `rule` and `message`; `--format github` prints GitHub
+workflow commands. Usage and configuration problems go to stderr. Exit codes: `0` no errors, `1` at
+least one error, `2` usage or configuration problem.
 
 Files given on the command line are ignored; the full tracked set is always analyzed
 (cross-file checks and allowlist checks need it). Untracked local instruction
@@ -196,6 +204,9 @@ on:
 - uses: actions/checkout@<sha>
 - uses: Will413028/agentfile-lint@<sha>
 ```
+
+The action runs with `--format github`, so findings appear as annotations on the pull request. GitHub
+shows at most 10 errors and 10 warnings per step; the others stay in the log with their file and line.
 
 `R2` and `R3c` need configuration to check anything (section lists, spec mappings); the preset
 documents every key. A rule at `error` can still emit some findings as warnings.

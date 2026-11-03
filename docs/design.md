@@ -156,10 +156,25 @@ weekly schedule so warnings appear before that happens.
 
 ## Output and exit codes
 
-`file:line: rule-id: message`, one finding per line, sorted by file, line, rule. Line `0` means
-the whole file and is printed as `:0` so the format has one shape. Errors go to stderr,
-warnings to stdout. Exit `0`: no errors; `1`: at least one error; `2`: usage or configuration
-problem. `--warn-as-error` promotes warnings. The format and exit codes are part of the
+Every finding goes to stdout, sorted by file, line, rule (docs/adr/0004).
+
+- Text (default): `file:line: severity: rule-id: message`, one finding per line. `severity` is
+  `error` or `warning` (configs say `warn`). A finding about the whole file drops the line field:
+  `file: severity: rule-id: message`. (GNU has `sourcefile:lineno: message`, and `program: message`
+  when no source file is relevant; it has no form for a whole file.)
+- `--format json`: one document `{"version": 1, "findings": [...]}`; each finding has `file`, `line`
+  (`null` for the whole file), `level` (`error` or `warning`), `rule` and `message`. `version` goes up
+  only when a field is removed or changes meaning, not when one is added.
+- `--format github`: one workflow command per finding, `::error` or `::warning` with `file`, `line`
+  (omitted for the whole file; GitHub then shows it on line 1) and `title` set to the rule id,
+  escaped like `escapeData` and `escapeProperty` in actions/toolkit `packages/core/src/command.ts`.
+  The message is the text-format line, so a finding past GitHub's annotation limits (10 errors and 10
+  warnings per step, 50 per job) keeps its location in the log. `action.yml` passes this format.
+
+The pseudo rule `E0` reports an instruction file that is not valid UTF-8; it is always on, and only an
+allowlist entry can exempt a file. Usage and configuration errors go to stderr (configuration
+errors as `agentfile-lint: message`; argparse prints its own usage message). Exit `0`: no errors; `1`: at least one error; `2`: usage or configuration
+problem. `--warn-as-error` promotes warnings. The formats and exit codes are part of the
 contract; which version part a change to them needs is in `docs/versioning.md`.
 
 ## Subcommands
@@ -167,7 +182,8 @@ contract; which version part a change to them needs is in `docs/versioning.md`.
 - `agentfile-lint check-pins` (experimental: outside the compatibility contract, mainly for someone
   who maintains many repositories; docs/adr/0004): every reference to this tool (pre-commit `rev:`,
   `uvx --from git+...@<sha>`, `uses: owner/agentfile-lint@<sha>`) must be a full 40-hex SHA and all
-  must be equal; output `file:line: check-pins: message`, exit 1. Line scanning, no YAML parser;
+  must be equal; findings on stdout as `file:line: error: check-pins: message` with exit 1, the summary
+  on stderr. Line scanning, no YAML parser;
   limits are listed in `docs/versioning.md` and the module docstring.
 - `agentfile-lint config --format json`: the effective merged configuration (preset, extends,
   repo config, defaults filled in) as JSON with sorted keys, so another program (a test in a language
