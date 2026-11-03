@@ -41,7 +41,10 @@ effective config + git ls-files (full set) -> rules -> findings -> allowlist -> 
 
 Files are `git ls-files` entries matching `discover.globs` (default `AGENTS.md`, `**/AGENTS.md`,
 `CLAUDE.md`, `**/CLAUDE.md`), never a file ending in `.local.md`, skipping files deleted in the
-working tree. File names given on the command line are not used to narrow the analysis: cross-file rules
+working tree. A tracked symlink that resolves to the same file as another discovered path (for example
+`CLAUDE.md -> AGENTS.md`) is an alias: only the non-symlink path is analyzed, so no rule reports the same
+text twice and R5 never compares a file with itself. A symlink to a file outside the discovered set is
+analyzed as its own file; a dangling one is skipped. File names given on the command line are not used to narrow the analysis: cross-file rules
 and the allowlist "no longer needed" check need the whole set, and a partial view would make
 them pass locally and fail in CI. Hooks therefore use `pass_filenames: false`.
 
@@ -106,7 +109,8 @@ Fenced code blocks and HTML comments are ignored by every text rule.
   would pass locally and fail in CI).
 - R6 constants: candidate patterns for values copied from code; findings are always warnings.
 - C1 CLAUDE.md: any tracked file named `CLAUDE.md`, whatever `discover.globs` says. `import-only`:
-  exactly one non-blank line, `import_line`, and an AGENTS.md next to it. `forbid`: must not exist.
+  exactly one non-blank line, `import_line`, and an AGENTS.md next to it; a symlink to that AGENTS.md
+  counts as the import. `forbid`: must not exist (a symlink included).
 
 A finding carries its own level and the rule level caps it: a rule at `warn` never produces an error,
 and a rule at `error` can still report some findings (R4 narrative words, R5 siblings, R6) as warnings.

@@ -23,6 +23,8 @@ def _level(rule_level: str, finding: Finding) -> str:
 
 def analyze(root: Path, config: Config, today: datetime.date, warn_as_error: bool = False) -> list[Finding]:
     paths = discover.instruction_files(root, config.globs)
+    alias = discover.aliases(root, paths)
+    paths = [p for p in paths if p not in alias]
     findings: list[Finding] = []
     texts: dict[str, str] = {}
     for path in paths:
