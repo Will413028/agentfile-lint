@@ -5,6 +5,8 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-03
+
 ### Changed (breaking)
 
 - An allowlist entry whose `path` is a same-directory symlink (see Fixed) now fails as "no longer
