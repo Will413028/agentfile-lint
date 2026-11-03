@@ -15,7 +15,7 @@ from typing import Any
 from . import allowlist
 from .errors import LEVELS, ConfigError, check_keys, expect_int, expect_str, expect_str_list
 from .finding import INPUT_RULE
-from .rules import RULES
+from .rules import ALIASES, RULES
 
 CONFIG_NAME = ".agentfile-lint.toml"
 # Migration aid for the 0.4.0 rename; remove at 1.0.
@@ -121,8 +121,35 @@ def _load_raw(ref: str, base_dir: Path | None, seen: tuple[str, ...]) -> dict[st
     merged: dict[str, Any] = {}
     for parent in extends:
         merged = _merge(merged, _load_raw(parent, base_dir, seen + (key,)))
-    own = {k: v for k, v in data.items() if k != "extends"}
+    own = _resolve_aliases({k: v for k, v in data.items() if k != "extends"}, ref)
     return _merge(merged, own)
+
+
+def _resolve_aliases(data: dict[str, Any], source: str) -> dict[str, Any]:
+    """Replace rule aliases with rule ids in one config file, before it merges with its parents.
+
+    Resolving per file keeps a repo's `[rules.size]` overriding a preset's `[rules.R1]`; one file
+    naming the same rule both ways is ambiguous and fails.
+    """
+    rules = data.get("rules")
+    if isinstance(rules, dict):
+        resolved: dict[str, Any] = {}
+        written: dict[str, str] = {}  # rule id -> the key the file used
+        for key, value in rules.items():
+            rule_id = ALIASES.get(key, key)
+            if rule_id in resolved:
+                raise ConfigError(f"{source}: rules.{written[rule_id]} and rules.{key} name the same rule; use one")
+            resolved[rule_id] = value
+            written[rule_id] = key
+        data = {**data, "rules": resolved}
+    al = data.get("allowlist")
+    if isinstance(al, dict) and isinstance(al.get("entries"), list):
+        entries = [
+            {**e, "rule": ALIASES[e["rule"]]} if isinstance(e, dict) and isinstance(e.get("rule"), str) and e["rule"] in ALIASES else e
+            for e in al["entries"]
+        ]
+        data = {**data, "allowlist": {**al, "entries": entries}}
+    return data
 
 
 def load(config_path: Path | None, today: datetime.date) -> Config:
@@ -149,7 +176,7 @@ def _validate(raw: dict[str, Any], today: datetime.date) -> Config:
     )
 
     rules_raw = raw.get("rules", {})
-    check_keys(rules_raw, set(RULES), "rules")
+    check_keys(rules_raw, set(RULES) | set(ALIASES), "rules")  # aliases are resolved by now; listed as a hint
     rules: dict[str, dict[str, Any]] = {}
     for rule_id, module in RULES.items():
         params = rules_raw.get(rule_id)

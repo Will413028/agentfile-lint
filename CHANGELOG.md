@@ -19,6 +19,9 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Rule aliases: a rule's name from `--list-rules` (`size` for R1) works wherever its id does, in
+  `[rules.<id>]` and an allowlist `rule` (`E0` and `allowlist` have no alias). Each config file is resolved before merging; one file naming
+  a rule by both fails (exit 2). Findings still print the id.
 - `--format json`: one document, `{"version": 1, "findings": [...]}`, each finding with `file`, `line`
   (`null` for a whole file), `level` (`error` or `warning`), `rule` and `message`. `version` goes up
   only when a field is removed or changes meaning.

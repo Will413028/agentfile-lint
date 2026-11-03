@@ -4,18 +4,24 @@ For each rule: why a finding is a problem, where its default comes from, whether
 only with `preset:strict`, and how often it was wrong when measured. Every key is documented in
 `agentfile_lint/presets/default.toml`; `agentfile-lint --list-rules` prints the effective levels.
 
-| Rule | Checks | Kind | Default | `preset:strict` |
-|---|---|---|---|---|
-| [R1](#r1-size) | size of a file and of the files on its path | objective | error (32 KiB on a path), warn (200 lines) | same |
-| [R2](#r2-shape) | required headings and file shape | objective, needs config | warn | warn |
-| [R3a](#r3a-test-names) | a backticked test name is defined | objective | warn | warn |
-| [R3b](#r3b-path-references) | a backticked path exists | heuristic | off | warn |
-| [R3c](#r3c-spec-references) | a `§N` reference matches a spec heading | objective, needs config | warn | warn |
-| [R4](#r4-rot) | dates, issue numbers, narrative words | heuristic | off | warn |
-| [R5](#r5-duplicates) | identical lines in files an agent loads together | objective match, heuristic intent | warn (same-name ancestor pairs) | warn (any pair, siblings) |
-| [R6](#r6-copied-constants) | values copied from code | heuristic | off | warn |
-| [C1](#c1-claudemd) | `CLAUDE.md` only imports `AGENTS.md` | convention | off | warn |
-| [allowlist](#allowlist) | exceptions are current and still needed | objective | error | error |
+Every rule in the table except `allowlist` has an id and an alias (the name after the level in
+`--list-rules`); `allowlist` and `E0` have only their id. The alias works wherever the id does: `[rules.size]`
+is `[rules.R1]`, and an allowlist entry may say `rule = "size"`. Each config file is resolved on its
+own before merging, so a repo's `[rules.size]` overrides a preset's `[rules.R1]`; one file that names a
+rule both ways fails (exit 2). Findings and error messages always print the id.
+
+| Rule | Alias | Checks | Kind | Default | `preset:strict` |
+|---|---|---|---|---|---|
+| [R1](#r1-size) | `size` | size of a file and of the files on its path | objective | error (32 KiB on a path), warn (200 lines) | same |
+| [R2](#r2-shape) | `shape` | required headings and file shape | objective, needs config | warn | warn |
+| [R3a](#r3a-test-names) | `test-names` | a backticked test name is defined | objective | warn | warn |
+| [R3b](#r3b-path-references) | `path-refs` | a backticked path exists | heuristic | off | warn |
+| [R3c](#r3c-spec-references) | `spec-refs` | a `§N` reference matches a spec heading | objective, needs config | warn | warn |
+| [R4](#r4-rot) | `rot` | dates, issue numbers, narrative words | heuristic | off | warn |
+| [R5](#r5-duplicates) | `duplicates` | identical lines in files an agent loads together | objective match, heuristic intent | warn (same-name ancestor pairs) | warn (any pair, siblings) |
+| [R6](#r6-copied-constants) | `constants` | values copied from code | heuristic | off | warn |
+| [C1](#c1-claudemd) | `claude-md` | `CLAUDE.md` only imports `AGENTS.md` | convention | off | warn |
+| [allowlist](#allowlist) | — | exceptions are current and still needed | objective | error | error |
 
 ## How the rates were measured
 
@@ -162,3 +168,9 @@ Default: on, from your config only; with no entries it reports nothing. Entries 
 before they expire, so run CI on a weekly schedule.
 
 Measured: objective, so no false-positive rate.
+
+## Rule ids for other files
+
+Planned, not implemented: rules for other file types get an id prefix per family, so ids stay unique
+as checks are added: `S` for `SKILL.md`, `H` for hooks, `M` for MCP configuration. `R` and `C` stay with
+instruction files, and `E` is reserved for input errors such as `E0`.

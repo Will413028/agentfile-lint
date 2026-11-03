@@ -4,14 +4,14 @@
 
 Semantic versions as git tags (`v0.2.0`). The tag points at a commit; consumers pin the full
 40-hex commit SHA and note the version in a comment. Before 1.0 (SemVer allows any change in 0.y.z),
-a minor version may also change the output format, rename or remove a rule id, or rename or remove a
+a minor version may also change the output format, rename or remove a rule id or rule alias, or rename or remove a
 config key; every such change is listed under "Changed (breaking)" in the changelog. Always read the
 changelog before moving a pin.
 
 | Change | Version part |
 |---|---|
 | Exit codes | major |
-| Output format, the behavior of `vendor` or `verify.py`, a removed or renamed rule id or config key | major from 1.0; minor before 1.0, under "Changed (breaking)" |
+| Output format, the behavior of `vendor` or `verify.py`, a removed or renamed rule id, rule alias or config key | major from 1.0; minor before 1.0, under "Changed (breaking)" |
 | A rule promoted from `warn` to `error`, a changed default limit, a new rule, a new option | minor |
 | A bug fix in a rule or command, documentation | patch |
 
