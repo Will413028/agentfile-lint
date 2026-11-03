@@ -161,8 +161,10 @@ ignore_negated_words = ["no longer"]
         rc, _, err = self.run_one("`schema.gone.sql`\n", self.CFG + "check_bare_names = true\n")
         self.assertEqual(rc, 1)
 
-    def test_default_level_is_warn(self):
+    def test_off_by_default_and_warn_in_strict(self):
         rc, out, err = lint({"AGENTS.md": "`gone/file.go`\n"})
+        self.assertEqual((rc, only("R3b", out + err)), (0, []))
+        rc, out, err = lint({"AGENTS.md": "`gone/file.go`\n"}, 'extends = ["preset:strict"]\n')
         self.assertEqual(rc, 0)
         self.assertEqual(len(only("R3b", out)), 1)
 
@@ -242,7 +244,7 @@ class RotTest(unittest.TestCase):  # R4
         self.assertEqual((rc, out, err), (0, [], []))
 
     def test_rule_level_warn_caps_dates_to_warnings(self):
-        rc, out, err = lint({"AGENTS.md": "Done 2026-10-31.\n"})
+        rc, out, err = lint({"AGENTS.md": "Done 2026-10-31.\n"}, '[rules.R4]\nlevel = "warn"\n')
         self.assertEqual(rc, 0)
         self.assertEqual(len(only("R4", out)), 1)
 
@@ -272,7 +274,7 @@ class DuplicateTest(unittest.TestCase):  # R5
 
     def test_sibling_duplicate_is_a_warning_on_both(self):
         files = {"a/AGENTS.md": self.LINE, "b/AGENTS.md": "x\n" + self.LINE, "AGENTS.md": "root\n"}
-        rc, out, err = lint(files, self.CFG)
+        rc, out, err = lint(files, self.CFG + 'sibling_level = "warn"\n')
         self.assertEqual(rc, 0)
         self.assertEqual(sorted(line.split(":")[0] for line in only("R5", out)), ["a/AGENTS.md", "b/AGENTS.md"])
 

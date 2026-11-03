@@ -1,4 +1,4 @@
-"""Version process: every rule not listed as graduated in the CHANGELOG starts at warn."""
+"""Version process: no shipped preset sets a rule above warn unless the CHANGELOG lists it as graduated."""
 import re
 import tomllib
 import unittest
@@ -6,7 +6,9 @@ import unittest
 import helpers
 
 CHANGELOG = (helpers.REPO / "CHANGELOG.md").read_text(encoding="utf-8")
-PRESET = tomllib.loads((helpers.REPO / "agentfile_lint" / "presets" / "default.toml").read_text(encoding="utf-8"))
+PRESETS_DIR = helpers.REPO / "agentfile_lint" / "presets"
+PRESET = tomllib.loads((PRESETS_DIR / "default.toml").read_text(encoding="utf-8"))
+ALL_PRESETS = {p.name: tomllib.loads(p.read_text(encoding="utf-8")) for p in sorted(PRESETS_DIR.glob("*.toml"))}
 
 
 def graduated(text):
@@ -23,11 +25,17 @@ def graduated(text):
 
 
 class VersioningTest(unittest.TestCase):
-    def test_rules_not_graduated_start_at_warn(self):
+    def test_rules_not_graduated_stay_at_or_below_warn(self):
+        # `off` is allowed: lowering a rule never needs a Graduated entry (docs/versioning.md).
         grad = graduated(CHANGELOG)
-        for rule_id, params in PRESET["rules"].items():
-            if rule_id not in grad:
-                self.assertEqual(params["level"], "warn", f"{rule_id} is not listed under Graduated in CHANGELOG.md")
+        self.assertIn("strict.toml", ALL_PRESETS)
+        for name, preset in ALL_PRESETS.items():
+            for rule_id, params in preset.get("rules", {}).items():
+                if rule_id not in grad and "level" in params:
+                    self.assertIn(params["level"], ("warn", "off"), f"{name}: {rule_id} is not listed under Graduated in CHANGELOG.md")
+
+    def test_the_level_check_is_not_vacuous(self):
+        self.assertEqual(PRESET["rules"]["R2"]["level"], "warn")  # at least one non-graduated rule is checked
 
     def test_graduated_rules_exist_in_the_preset(self):
         self.assertTrue(graduated(CHANGELOG) <= set(PRESET["rules"]))

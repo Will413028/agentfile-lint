@@ -18,11 +18,19 @@ versions follow [Semantic Versioning](https://semver.org/).
   an entry level never raises a finding above the rule level.
 - R1 `max_line_chars` may be omitted; then line length is not checked. A config that sets it keeps the
   old behavior.
+- `preset:strict` (`extends = ["preset:strict"]`): the default preset plus R3b, R4, R6, C1 and R5
+  between siblings, all at `warn`, as they were on by default in 0.4.0.
 
 ### Changed
 
 - The GitHub Action (`action.yml`) sets up Python with `actions/setup-python` v7.0.0 instead of v5.6.0.
   Inputs are unchanged.
+- The default preset runs only objective checks. R3b (path references), R4 (dates, issue numbers,
+  narrative words) and R6 (copied constants) guess, and C1 checks a convention of this tool, so they
+  are `off` by default; R5 between sibling files (`sibling_level`), which no agent loads together, is
+  `off` too. On twelve popular public repositories with no config, 0.4.0's sampled false-positive rates
+  were R3b 95%, R4 84%, R5 100% and R6 76%, and every C1 finding was a difference of convention. To
+  keep the 0.4.0 behavior, add `extends = ["preset:strict"]` to your config.
 - R1 default limits use only limits that an agent's documentation states. `**/AGENTS.md` over 32768
   bytes is an error: Codex stops reading project docs at 32 KiB (`project_doc_max_bytes`). AGENTS.md
   and CLAUDE.md over 200 lines are a warning: Claude Code asks for fewer than 200 lines per file and

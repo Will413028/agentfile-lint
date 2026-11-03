@@ -1,4 +1,6 @@
 # Default preset shipped with agentfile-lint. Repo configs extend it and override single keys.
+# It runs only objective checks; the heuristic rules (R3b, R4, R6, R5 between siblings) and the C1
+# convention are `off` here and turned on by `extends = ["preset:strict"]` (presets/strict.toml).
 extends = []
 
 [discover]
@@ -69,8 +71,9 @@ files = ["**/test_*.py", "**/*_test.py"]
 
 # R3b path references: heuristic, tried against the file's directory, its ancestors, the repo root
 # and `base_dirs` (entries may use `*`), also under `source_roots` and with `resolve_extensions`.
+# Off by default (heuristic); preset:strict sets warn.
 [rules.R3b]
-level = "warn"
+level = "off"
 base_dirs = []
 source_roots = []
 resolve_extensions = []
@@ -99,8 +102,9 @@ ignore_before = []        # skip a reference when the text before it on the line
 plain_words = ["see", "spec", "specification", "section", "sections", "in", "per", "and", "or", "to", "at", "of", "the", "also", "cf", "ref"]  # ...unless the word before is one of these
 
 # R4 rot: dates and issue numbers at the rule level, narrative words at narrative_level.
+# Off by default (heuristic); preset:strict sets warn.
 [rules.R4]
-level = "warn"
+level = "off"
 narrative_level = "warn"
 date_patterns = ['(?<![0-9])(?:19|20)\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])(?![0-9])']
 issue_patterns = [
@@ -117,16 +121,17 @@ narrative_words = [
 
 # R5 duplicates: identical lines (>= min_chars) in an ancestor and a descendant file at the rule
 # level, in sibling files at sibling_level. Always compares the full tracked set.
+# Siblings are off by default (two files no agent loads together); preset:strict sets warn.
 [rules.R5]
 level = "warn"
-sibling_level = "warn"
+sibling_level = "off"
 min_chars = 40
 ignore_headings = true
 ignore_patterns = []
 
-# R6 copied constants: candidates only, always warnings.
+# R6 copied constants: candidates only, always warnings. Off by default (heuristic); preset:strict sets warn.
 [rules.R6]
-level = "warn"
+level = "off"
 candidate_patterns = [
   '`[A-Za-z_][A-Za-z0-9_.]*\s*(?::=|=|:)\s*-?\d[0-9_.,]*[A-Za-z%]*`',
   '\b[A-Z][A-Z0-9]*_[A-Z0-9_]+\b[ \t`=:]{1,6}[0-9]+',
@@ -134,7 +139,8 @@ candidate_patterns = [
 ]
 
 # C1 CLAUDE.md: `import-only` (one line, the import) or `forbid` (no CLAUDE.md at all).
+# Off by default (a convention of this tool, not an error in other repositories); preset:strict sets warn.
 [rules.C1]
-level = "warn"
+level = "off"
 mode = "import-only"
 import_line = "@AGENTS.md"
