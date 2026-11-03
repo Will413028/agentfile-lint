@@ -66,9 +66,12 @@ expiry warnings appear without commits.
   of R2 shapes and R3c specs: `*` and `?` never cross `/`, `**/` matches zero or more directories.
   Depth tiers are written as globs: `AGENTS.md`, `*/AGENTS.md`, `**/AGENTS.md`.
 - `path_limits`: `{glob, max_bytes, level}` entries for the combined size of a file and the files
-  matching the same glob in its strict ancestor directories (bytes after block removal). The finding is
-  on the file where the total first exceeds the limit; files below it are not reported again, and a
-  single file over the limit is reported the same way.
+  matching the same glob in its strict ancestor directories; every entry applies (unlike `limits`).
+  Sizes are the bytes on disk, as the agent reads them: `excluded_blocks` and CRLF are not discounted.
+  The finding is on the file where the total first exceeds the limit; files below it are not reported
+  again, and a single file over the limit is reported the same way. The glob is meant to match one file
+  per directory (`**/AGENTS.md`); Codex also loads `AGENTS.override.md` or fallback names instead of
+  AGENTS.md, which the default does not model (revisit when an issue reports such a repository).
 - Default preset: only limits an agent's documentation states. AGENTS.md files on one path that total
   over 32768 bytes are an error: Codex reads AGENTS.md from the root down to the working directory and
   stops adding files at 32 KiB in total (`project_doc_max_bytes`,

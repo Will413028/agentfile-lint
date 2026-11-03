@@ -5,7 +5,8 @@ Each `limits` entry may give its byte and line limits their own level (`bytes_le
 an omitted level follows the rule level, and no entry level can raise a finding above the rule level.
 
 `path_limits` limit the combined size of a file and the files matching the same glob in its ancestor
-directories, the set an agent loads from the root down (Codex stops at 32 KiB in total). The finding is
+directories, the set an agent loads from the root down (Codex stops at 32 KiB in total). Every entry
+applies. Sizes are the bytes stored on disk, as the agent reads them (no block removal). The finding is
 on the file where the total first exceeds the limit, not on the files below it.
 """
 from __future__ import annotations
@@ -15,6 +16,7 @@ import re
 from typing import Any
 
 from ..context import Context
+from ._text import parent_dirs
 from ..discover import glob_to_regex
 from ..errors import ConfigError, check_keys, expect_int, expect_level, expect_str, expect_table_list, require_keys
 from ..finding import Finding
@@ -95,10 +97,6 @@ def _body(text: str, params: dict[str, Any]) -> str:
     return text
 
 
-def _in_or_below(directory: str, path: str) -> bool:
-    return directory == "" or posixpath.dirname(path) == directory or path.startswith(directory + "/")
-
-
 def check_repo(ctx: Context, params: dict[str, Any]) -> list[Finding]:
     found: list[Finding] = []
     for entry in params.get("path_limits", []):
@@ -106,11 +104,13 @@ def check_repo(ctx: Context, params: dict[str, Any]) -> list[Finding]:
         if level == "off":
             continue
         pattern = glob_to_regex(entry["glob"])
-        sizes = {p: len(_body(t, params).encode("utf-8")) for p, t in ctx.files.items() if pattern.match(p)}
+        sizes = {p: (ctx.root / p).stat().st_size for p in ctx.files if pattern.match(p)}
+        by_dir: dict[str, list[str]] = {}
+        for p in sorted(sizes):
+            by_dir.setdefault(posixpath.dirname(p), []).append(p)
         limit = entry["max_bytes"]
         for path in sorted(sizes):
-            ancestors = sorted((a for a in sizes if a != path and _in_or_below(posixpath.dirname(a), path)
-                                and posixpath.dirname(a) != posixpath.dirname(path)), key=lambda a: (a.count("/"), a))
+            ancestors = [a for d in reversed(parent_dirs(path)) for a in by_dir.get(d, [])]  # root first
             before = sum(sizes[a] for a in ancestors)
             total = before + sizes[path]
             if total <= limit or before > limit:  # within the limit, or the overflow starts above

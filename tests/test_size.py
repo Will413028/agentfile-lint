@@ -206,6 +206,16 @@ class PathLimitsTest(unittest.TestCase):
         self.assertIn("a/AGENTS.md:0: R1: file and its ancestors (AGENTS.md) total 40000 bytes, limit 32768", r.stdout)
         self.assertEqual(run(files, "[rules.R1]\nlimits = []\npath_limits = []\n").returncode, 0)
 
+    def test_combined_size_counts_raw_bytes(self):
+        # Codex counts the file as stored: neither excluded_blocks nor CRLF -> LF lower the total.
+        block = '[[rules.R1.excluded_blocks]]\nbegin = "<!-- B -->"\nend = "<!-- E -->"\n'
+        files = {"AGENTS.md": "<!-- B -->\n" + kb(20000) + "<!-- E -->\n", "a/AGENTS.md": kb(13000)}
+        r = self.run_files(files, PATH_32K + block)
+        self.assertIn("a/AGENTS.md:0: R1: file and its ancestors (AGENTS.md) total 33022 bytes, limit 32768", r.stderr)
+        crlf = {"AGENTS.md": ("x" * 98 + "\r\n") * 200, "a/AGENTS.md": ("y" * 98 + "\r\n") * 128}
+        r = self.run_files(crlf)
+        self.assertIn("a/AGENTS.md:0: R1: file and its ancestors (AGENTS.md) total 32800 bytes, limit 32768", r.stderr)
+
     def test_entry_validation(self):
         for bad in (
             '[[rules.R1.path_limits]]\nglob = "**/AGENTS.md"\n',                          # no max_bytes

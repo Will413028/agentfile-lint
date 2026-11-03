@@ -18,7 +18,7 @@ from typing import Any
 from ..context import Context
 from ..errors import ConfigError, check_keys, expect_bool, expect_int, expect_level, expect_regex_list, require_keys
 from ..finding import Finding
-from ._text import prose_lines
+from ._text import parent_dirs, prose_lines
 
 ID = "R5"
 NAME = "duplicates"
@@ -64,8 +64,7 @@ def _is_ancestor(a: str, b: str) -> bool:
 
 def _is_same_name_ancestor(a: str, b: str) -> bool:
     """File `a` has the name of `b` and sits in a strict ancestor directory of `b`."""
-    da, db = posixpath.dirname(a), posixpath.dirname(b)
-    return da != db and posixpath.basename(a) == posixpath.basename(b) and _is_ancestor(a, b)
+    return posixpath.basename(a) == posixpath.basename(b) and posixpath.dirname(a) in parent_dirs(b)
 
 
 def check_repo(ctx: Context, params: dict[str, Any]) -> list[Finding]:
