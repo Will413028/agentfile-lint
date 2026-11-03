@@ -33,11 +33,21 @@ class SymlinkAliasTest(unittest.TestCase):
         _, lines = lint({"AGENTS.md": LONG}, {"sub/AGENTS.md": "../AGENTS.md"})
         self.assertTrue([x for x in on("sub/AGENTS.md", lines) if ": R5: line repeats AGENTS.md:" in x])
 
-    def test_symlinks_in_sibling_directories_keep_the_shallowest_path(self):
+    def test_symlinks_in_other_directories_are_separate_load_locations(self):
         files = {"docs/shared.md": LONG}
         _, lines = lint(files, {"z/AGENTS.md": "../docs/shared.md", "a/b/AGENTS.md": "../../docs/shared.md"})
-        self.assertTrue([x for x in on("z/AGENTS.md", lines) if ": R1: " in x])  # the shallow path is checked
-        self.assertEqual(on("a/b/AGENTS.md", lines), [])  # sorts first, but deeper
+        self.assertTrue([x for x in on("z/AGENTS.md", lines) if ": R1: " in x])
+        self.assertTrue([x for x in on("a/b/AGENTS.md", lines) if ": R1: " in x])
+
+    def test_two_symlinks_in_one_directory_to_an_ancestor_file_are_checked_once(self):
+        _, lines = lint({"AGENTS.md": LONG}, {"sub/AGENTS.md": "../AGENTS.md", "sub/CLAUDE.md": "../AGENTS.md"}, '[rules.C1]\nlevel = "error"\n')
+        self.assertEqual(on("sub/CLAUDE.md", lines), [])  # alias of sub/AGENTS.md; C1 accepts it
+        self.assertTrue([x for x in on("sub/AGENTS.md", lines) if ": R5: line repeats AGENTS.md:" in x])
+
+    def test_c1_accepts_the_symlink_when_globs_leave_out_claude_md(self):
+        cfg = '[discover]\nglobs = ["AGENTS.md", "**/AGENTS.md"]\n[rules.C1]\nlevel = "error"\n'
+        rc, lines = lint({"AGENTS.md": "ok\n"}, {"CLAUDE.md": "AGENTS.md"}, cfg)
+        self.assertEqual((rc, [x for x in lines if ": C1: " in x]), (0, []))
 
     def test_agents_md_symlink_to_claude_md_checks_claude_md_as_the_real_file(self):
         _, lines = lint({"CLAUDE.md": LONG}, {"AGENTS.md": "CLAUDE.md"}, '[rules.C1]\nlevel = "error"\n')
