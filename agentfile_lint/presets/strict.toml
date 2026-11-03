@@ -12,6 +12,7 @@ level = "warn"
 
 [rules.R5]
 sibling_level = "warn"
+ancestor_pairs = "any"
 
 [rules.R6]
 level = "warn"

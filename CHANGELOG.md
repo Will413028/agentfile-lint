@@ -18,8 +18,13 @@ versions follow [Semantic Versioning](https://semver.org/).
   an entry level never raises a finding above the rule level.
 - R1 `max_line_chars` may be omitted; then line length is not checked. A config that sets it keeps the
   old behavior.
-- `preset:strict` (`extends = ["preset:strict"]`): the default preset plus R3b, R4, R6, C1 and R5
-  between siblings, all at `warn`, as they were on by default in 0.4.0.
+- R5 `ancestor_pairs`: `same-name` counts as ancestor and descendant only a file with the same name
+  in a strict ancestor directory (`AGENTS.md` and `sub/AGENTS.md`, which one agent loads together);
+  `any` also counts different names and two files in one directory, as before. Other pairs are
+  siblings (`sibling_level`).
+- `preset:strict` (`extends = ["preset:strict"]`): the default preset plus R3b, R4, R6 and C1 at
+  `warn`, and R5 on any pair (`ancestor_pairs = "any"`) and between siblings at `warn`: the 0.4.0
+  defaults, except R1.
 
 ### Changed
 
@@ -27,10 +32,12 @@ versions follow [Semantic Versioning](https://semver.org/).
   Inputs are unchanged.
 - The default preset runs only objective checks. R3b (path references), R4 (dates, issue numbers,
   narrative words) and R6 (copied constants) guess, and C1 checks a convention of this tool, so they
-  are `off` by default; R5 between sibling files (`sibling_level`), which no agent loads together, is
-  `off` too. On twelve popular public repositories with no config, 0.4.0's sampled false-positive rates
-  were R3b 95%, R4 84%, R5 100% and R6 76%, and every C1 finding was a difference of convention. To
-  keep the 0.4.0 behavior, add `extends = ["preset:strict"]` to your config.
+  are `off` by default. R5 by default reports only same-name ancestor pairs (`ancestor_pairs =
+  "same-name"`): 0 of 13 such findings on ten held-out public repositories were false positives. Other
+  pairs (different names, the same directory, siblings) are `off` by default. On twelve popular
+  public repositories with no config, 0.4.0's sampled false-positive rates were R3b 95%, R4 84%, R5
+  100% and R6 76%, and every C1 finding was a difference of convention. To keep the 0.4.0 behavior,
+  add `extends = ["preset:strict"]` to your config. See docs/adr/0003.
 - R1 default limits use only limits that an agent's documentation states. `**/AGENTS.md` over 32768
   bytes is an error: Codex stops reading project docs at 32 KiB (`project_doc_max_bytes`). AGENTS.md
   and CLAUDE.md over 200 lines are a warning: Claude Code asks for fewer than 200 lines per file and

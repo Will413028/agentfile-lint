@@ -1,5 +1,8 @@
 name: agentfile-lint
 description: Lint agent instruction files (AGENTS.md / CLAUDE.md) in the checked-out repository.
+branding:
+  icon: check-square
+  color: blue
 inputs:
   config:
     description: Path to a config file. Default is .agentfile-lint.toml at the repo root, if present.

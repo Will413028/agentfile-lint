@@ -60,17 +60,20 @@ expiry warnings appear without commits.
 
 ## Rule R1: size
 
-- Limits come from `limits`, an ordered list of `{glob, max_bytes, max_lines}` entries (either or both
-  limits). The first entry whose glob matches the path applies; a file that matches no entry has no size
+- Limits come from `limits`, an ordered list of `{glob, max_bytes, max_lines, bytes_level, lines_level}`
+  entries (either or both limits; each level is optional and defaults to the rule level, which caps it). The first entry whose glob matches the path applies; a file that matches no entry has no size
   limit, so the default preset ends with entries that cover every discovered file. Globs use the matcher
   of R2 shapes and R3c specs: `*` and `?` never cross `/`, `**/` matches zero or more directories.
   Depth tiers are written as globs: `AGENTS.md`, `*/AGENTS.md`, `**/AGENTS.md`.
-- Default preset: `AGENTS.md` and `CLAUDE.md` at the root, 12000 bytes and 200 lines; `**/AGENTS.md` and
-  `**/CLAUDE.md`, 6000 bytes and 200 lines. The line limit follows Claude Code's official guidance of
-  fewer than 200 lines per CLAUDE.md file (https://code.claude.com/docs/en/memory).
+- Default preset: only limits an agent's documentation states. `**/AGENTS.md` over 32768 bytes is an
+  error: Codex stops reading project docs at 32 KiB (`project_doc_max_bytes`,
+  https://learn.chatgpt.com/docs/agent-configuration/agents-md). `**/AGENTS.md` and `**/CLAUDE.md` over
+  200 lines are a warning: Claude Code asks for fewer than 200 lines per CLAUDE.md file and reads
+  AGENTS.md when there is no CLAUDE.md (https://code.claude.com/docs/en/memory), but truncates nothing.
+  Every default error must point to such a hard limit (docs/adr/0003).
 - The old `max_bytes` tier table is rejected with a message that points to the migration note in the
   changelog.
-- Per-line limit in characters.
+- Per-line limit in characters (`max_line_chars`), optional; omitted (the default), it is not checked.
 - `excluded_blocks`: marker pairs; the text from a begin marker through the end marker (and one
   trailing newline) is removed before measuring.
 - Exact semantics: files are read as UTF-8 in text mode (CRLF becomes LF); bytes and lines are counted on
@@ -80,8 +83,10 @@ expiry warnings appear without commits.
 
 ## Rules R2 to R6 and C1
 
-All of them enter the default preset at `warn` (see Versioning); the severity named below is what a
-repository gets with `level = "error"`. Each rule reads its parameters from the config, and the
+The default preset runs only objective checks: R2, R3a, R3c and R5 (same-name ancestor pairs) at
+`warn`; R3b, R4 and R6 guess and C1 checks a convention, so they are `off` and `preset:strict` turns
+them on at `warn`, with R5 on any pair (docs/adr/0003). New rules enter at `warn` (see Versioning);
+the severity named below is what a repository gets with `level = "error"`. Each rule reads its parameters from the config, and the
 preset documents every key. Cross-file rules (`check_repo`) always see the full tracked set.
 Fenced code blocks and HTML comments are ignored by every text rule.
 
@@ -97,8 +102,9 @@ Fenced code blocks and HTML comments are ignored by every text rule.
   also under `source_roots` and with `resolve_extensions`. Existence means a tracked file or the
   directory of one. Skipped: spaces and `<>*{}$=|()[]?`, URLs, `@`/`~`/`-`/`/` prefixes, matches of
   `ignore_patterns`, lines with an `ignore_negated_words` word, and bare file names unless
-  `check_bare_names`. Measured against real repositories this heuristic had a false-positive rate
-  of several percent and found no broken reference, which is why it stays at `warn`.
+  `check_bare_names`. On twelve popular public repositories with no config, 18 of the 19 sampled
+  findings that could be judged were false positives (external or placeholder paths, paths relative to each
+  package), so it is `off` by default and `warn` in `preset:strict`.
 - R3c spec references: `specs` maps instruction files to a spec document (`{1}` is what the glob's first
   `*` matched); each `ref_pattern` match must match a numbered heading (`heading_pattern`; a heading
   2.1 also makes section 2 valid). Skipped: references qualified by an ASCII word other than
@@ -107,9 +113,12 @@ Fenced code blocks and HTML comments are ignored by every text rule.
   A match inside a token that has a path separator, a file extension or a date-prefixed slug is a name,
   not a date.
 - R5 duplicates: lines of at least `min_chars` characters, compared after collapsing whitespace and
-  removing a list marker; headings and table rules are skipped. Same line in a file and in a file of an
-  ancestor directory (or the same directory) is reported on the descendant at the rule level; between
-  siblings at `sibling_level`. Exact matches only. Always the full set (a partial view
+  removing a list marker; headings and table rules are skipped. Same line in a file and in an ancestor
+  file is reported on the descendant at the rule level. `ancestor_pairs = "same-name"` (default) counts
+  only a file with the same name in a strict ancestor directory, the pair one agent loads together
+  (Codex reads AGENTS.md from the root down to the working directory, Claude Code CLAUDE.md from the
+  working directory up); `any` (strict) also counts different names and two files in one directory.
+  Every other pair is a sibling pair, reported at `sibling_level` (default `off`, strict `warn`). Exact matches only. Always the full set (a partial view
   would pass locally and fail in CI).
 - R6 constants: candidate patterns for values copied from code; findings are always warnings.
 - C1 CLAUDE.md: any tracked file named `CLAUDE.md`, whatever `discover.globs` says. `import-only`:

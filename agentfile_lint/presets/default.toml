@@ -121,10 +121,13 @@ narrative_words = [
 
 # R5 duplicates: identical lines (>= min_chars) in an ancestor and a descendant file at the rule
 # level, in sibling files at sibling_level. Always compares the full tracked set.
-# Siblings are off by default (two files no agent loads together); preset:strict sets warn.
+# `ancestor_pairs`: `same-name` counts only same-name files in ancestor directories (AGENTS.md and
+# sub/AGENTS.md, which one agent loads together); `any` also counts different names and files in one
+# directory. Other pairs are siblings. Both are off by default; preset:strict sets `any` and warn.
 [rules.R5]
 level = "warn"
 sibling_level = "off"
+ancestor_pairs = "same-name"
 min_chars = 40
 ignore_headings = true
 ignore_patterns = []

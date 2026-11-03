@@ -4,20 +4,23 @@ A linter for agent instruction files (`AGENTS.md`, `CLAUDE.md`). Rules and limit
 TOML file; the runner is a thin Python program that uses only the standard library
 (Python 3.11 or newer). A local git hook and CI call the same program with the same config.
 
-Status: version 0.4.0. Every rule except `R1` ships at `warn`; raise a rule to `error` in your own config once it is clean.
+Status: version 0.4.0; the unreleased changes on `dev` are listed in the CHANGELOG. The default preset
+runs only objective checks; `extends = ["preset:strict"]` adds the heuristic rules and the `C1`
+convention at `warn`. Every rule except `R1` ships at `warn` or `off`; raise a rule to `error` in your
+own config once it is clean.
 
-| Rule | Level (default) | What it checks |
-|---|---|---|
-| `R1` | error | byte and line limits chosen by path glob (first match wins) and a character limit per line; optional marker blocks (for example text a tool injects) are not counted |
-| `R2` | warn | file shape: required section headings in order, optional title, one-line purpose, bullet-only sections |
-| `R3a` | warn | a test name in backticks is defined in a tracked test file |
-| `R3b` | warn | a path in backticks exists (resolved from the file, its ancestors, the root and configured bases; heuristic) |
-| `R3c` | warn | a `§N` reference matches a numbered heading in the mapped spec document |
-| `R4` | warn | dates and issue numbers (rule level), narrative words such as "currently" (`narrative_level`) |
-| `R5` | warn | identical lines in an ancestor and a descendant file (rule level) or in sibling files (`sibling_level`) |
-| `R6` | warn | candidates for constants copied from code (always a warning) |
-| `C1` | warn | `CLAUDE.md` is only the line `@AGENTS.md` (`import-only`) or absent (`forbid`) |
-| `allowlist` | error | time-boxed exceptions: expired or no-longer-needed entries fail, entries warn before they expire |
+| Rule | Default | `preset:strict` | What it checks |
+|---|---|---|---|
+| `R1` | error | error | byte and line limits chosen by path glob (first match wins), each with its own level, and an optional character limit per line; optional marker blocks (for example text a tool injects) are not counted. Default: `AGENTS.md` over 32 KiB is an error (Codex reads no more), `AGENTS.md` and `CLAUDE.md` over 200 lines a warning (Claude Code guidance) |
+| `R2` | warn | warn | file shape: required section headings in order, optional title, one-line purpose, bullet-only sections |
+| `R3a` | warn | warn | a test name in backticks is defined in a tracked test file |
+| `R3b` | off | warn | a path in backticks exists (resolved from the file, its ancestors, the root and configured bases; heuristic) |
+| `R3c` | warn | warn | a `§N` reference matches a numbered heading in the mapped spec document |
+| `R4` | off | warn | dates and issue numbers (rule level), narrative words such as "currently" (`narrative_level`) |
+| `R5` | warn | warn | identical lines in a same-name file of an ancestor directory (rule level; strict: any file in an ancestor or the same directory, `ancestor_pairs`) or in sibling files (`sibling_level`: off; strict: warn) |
+| `R6` | off | warn | candidates for constants copied from code (always a warning) |
+| `C1` | off | warn | `CLAUDE.md` is only the line `@AGENTS.md` (`import-only`) or absent (`forbid`) |
+| `allowlist` | error | error | time-boxed exceptions: expired or no-longer-needed entries fail, entries warn before they expire |
 
 ## Usage
 
@@ -57,7 +60,7 @@ globs = ["AGENTS.md", "**/AGENTS.md"]
 
 [rules.R1]
 level = "error"                     # error | warn | off
-max_line_chars = 500
+max_line_chars = 500                # optional; omitted, line length is not checked
 excluded_blocks = [{ begin = "<!-- BEGIN:x -->", end = "<!-- END:x -->" }]
 
 # First matching glob wins; a file matching no entry has no size limit.
@@ -65,6 +68,7 @@ excluded_blocks = [{ begin = "<!-- BEGIN:x -->", end = "<!-- END:x -->" }]
 glob = "AGENTS.md"
 max_bytes = 12000
 max_lines = 200                     # optional; either or both
+lines_level = "warn"                # optional, also bytes_level; default: the rule level
 
 [[rules.R1.limits]]
 glob = "**/AGENTS.md"
