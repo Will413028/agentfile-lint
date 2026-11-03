@@ -3,15 +3,22 @@
 ## Versions
 
 Semantic versions as git tags (`v0.2.0`). The tag points at a commit; consumers pin the full
-40-hex commit SHA and note the version in a comment. Pre-1.0, a minor version may add rules and
-change defaults; it may also remove or rename a config key (listed under "Changed (breaking)" in the
-changelog). Always read the changelog before moving a pin.
+40-hex commit SHA and note the version in a comment. Before 1.0 (SemVer allows any change in 0.y.z),
+a minor version may also change the output format, rename or remove a rule id, or rename or remove a
+config key; every such change is listed under "Changed (breaking)" in the changelog. Always read the
+changelog before moving a pin.
 
 | Change | Version part |
 |---|---|
-| Output format, exit codes, a removed or renamed rule id or config key | major |
+| Exit codes | major |
+| Output format, the behavior of `vendor` or `verify.py`, a removed or renamed rule id or config key | major from 1.0; minor before 1.0, under "Changed (breaking)" |
 | A rule promoted from `warn` to `error`, a changed default limit, a new rule, a new option | minor |
 | A bug fix in a rule or command, documentation | patch |
+
+Experimental features are marked "(experimental)" in the README and in their `--help`. They are
+outside this table: their output and options may change in any minor release, listed under `Changed`.
+Today that is `check-pins` (docs/adr/0004). Its `[check_pins]` config table is not experimental: the
+main command validates it, so it follows the rules for config keys.
 
 ## Changelog rules
 
@@ -45,7 +52,8 @@ and the next release pull request conflicts with itself.
 
 ## Upgrading a consumer
 
-Pick one mechanism per consumer; `check-pins` keeps the references consistent.
+Pick one mechanism per consumer. Optionally, `check-pins` (experimental) checks that the references
+agree.
 
 - pre-commit: `pre-commit autoupdate --repo <url>` rewrites `rev:` to a tag; use
   `pre-commit autoupdate --freeze` to write the full commit SHA with the tag as a comment.
@@ -57,10 +65,12 @@ Pick one mechanism per consumer; `check-pins` keeps the references consistent.
 - Vendored copy: run `agentfile-lint vendor --to <dir> --force` from the new tag's checkout; the
   diff of that change is the review. `verify.py` detects accidental edits only.
 
-After any upgrade run `agentfile-lint check-pins` (every reference pins the same full SHA) and the
-normal check; new `warn` output after an upgrade is expected and is the point of the warn-first policy.
+After any upgrade run the normal check, and `agentfile-lint check-pins` if you use it; new `warn`
+output after an upgrade is expected and is the point of the warn-first policy.
 
-## `check-pins`
+## `check-pins` (experimental)
+
+Its output and options may change in a minor release (see Versions).
 
 `agentfile-lint check-pins [--repo STRING] [--files GLOB ...] [--require-refs]` scans tracked
 files (default: `.pre-commit-config.yaml`, `lefthook.y*ml`, `.github/workflows/*.y*ml`) for

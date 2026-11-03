@@ -33,6 +33,8 @@ python3 -m agentfile_lint      # lint this repository's own instruction files
 - A new rule enters at `warn`. It goes into the default preset only if it is objective or passes the
   false-positive bar in `docs/adr/0003-objective-checks-by-default.md`; otherwise it goes into
   `preset:strict`. Add its entry to `docs/rules.md`.
-- The output format `file:line: rule-id: message` and the exit codes 0, 1 and 2 are a contract
-  (`tests/test_contract.py`); changing them is a major version.
+- The output format, rule ids, config keys and the exit codes 0, 1 and 2 are a contract, tested in
+  `tests/`. Before 1.0 a change to the output format, a rule id or a config key is a minor version
+  listed under `Changed (breaking)`; exit codes change only in a major version (`docs/versioning.md`).
+  Experimental commands (`check-pins`) are outside the contract.
 - Write the failing test first; tests build throwaway git repositories (`tests/helpers.py`).

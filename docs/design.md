@@ -160,18 +160,19 @@ weekly schedule so warnings appear before that happens.
 the whole file and is printed as `:0` so the format has one shape. Errors go to stderr,
 warnings to stdout. Exit `0`: no errors; `1`: at least one error; `2`: usage or configuration
 problem. `--warn-as-error` promotes warnings. The format and exit codes are part of the
-contract; changing them is a major version change.
+contract; which version part a change to them needs is in `docs/versioning.md`.
 
 ## Subcommands
 
-- `agentfile-lint check-pins`: every reference to this tool (pre-commit `rev:`, `uvx --from git+...@<sha>`,
-  `uses: owner/agentfile-lint@<sha>`) must be a full 40-hex SHA and all must be equal; output
-  `file:line: check-pins: message`, exit 1. Line scanning, no YAML parser; limits are listed in
-  `docs/versioning.md` and the module docstring.
+- `agentfile-lint check-pins` (experimental: outside the compatibility contract, mainly for someone
+  who maintains many repositories; docs/adr/0004): every reference to this tool (pre-commit `rev:`,
+  `uvx --from git+...@<sha>`, `uses: owner/agentfile-lint@<sha>`) must be a full 40-hex SHA and all
+  must be equal; output `file:line: check-pins: message`, exit 1. Line scanning, no YAML parser;
+  limits are listed in `docs/versioning.md` and the module docstring.
 - `agentfile-lint config --format json`: the effective merged configuration (preset, extends,
   repo config, defaults filled in) as JSON with sorted keys, so another program (a test in a language
   without a TOML parser) can read the same values the linter uses. Exit 2 on an invalid config.
-- `agentfile-lint vendor`: see Vendored copy.
+- `agentfile-lint vendor`: see Vendored copy. It and the copy's `verify.py` are part of the contract.
 
 ## Judgment checks
 
@@ -220,6 +221,7 @@ diff of the pull request that upgrades the vendored copy.
 ## Versioning
 
 Semantic versions as git tags. New rules enter as `warn`; promoting a rule to `error` is a minor
-change with a changelog entry under `Graduated`; renaming or removing a rule id is a major change.
+change with a changelog entry under `Graduated`; renaming or removing a rule id is a major change
+from 1.0, and before 1.0 a minor one listed under `Changed (breaking)`.
 Consumers pin a full commit SHA with the version in a comment. The process (changelog rules, release,
 how consumers upgrade) is in `docs/versioning.md`.

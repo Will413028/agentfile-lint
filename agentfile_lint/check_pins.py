@@ -89,7 +89,7 @@ def evaluate(refs: list[Ref]) -> list[tuple[str, int, str]]:
 
 
 def main(argv: list[str]) -> int:
-    p = argparse.ArgumentParser(prog="agentfile-lint check-pins", description="Check that every reference to this tool pins the same full commit SHA.")
+    p = argparse.ArgumentParser(prog="agentfile-lint check-pins", description="(experimental) Check that every reference to this tool pins the same full commit SHA.")
     p.add_argument("--repo", help="string identifying this tool's repository in a reference (default: check_pins.repo from the config, else 'agentfile-lint')")
     p.add_argument("--config", help=f"config file (default: {config_mod.CONFIG_NAME} at the repo root, if present)")
     p.add_argument("--files", nargs="+", metavar="GLOB", help="files to scan, as globs relative to the repo root (default: check_pins.files)")

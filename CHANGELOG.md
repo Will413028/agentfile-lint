@@ -9,6 +9,17 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 - `docs/field-report.md`: what 0.4.0, 0.5.0 and `preset:strict` report on 22 popular public
   repositories with no config, and what the real problems looked like.
+- `docs/adr/0004-public-exceptions-output-ids.md`: the output format, permanent per-path exceptions,
+  rule aliases and byte measurement planned for 0.6.0, and an amendment to ADR 0001.
+
+### Changed
+
+- `check-pins` is experimental: its output and options may change in any minor release. The README
+  and `check-pins --help` mark it "(experimental)"; the upgrade notes in `docs/versioning.md` call it
+  optional. `vendor` and `verify.py` stay part of the compatibility contract.
+- Versioning before 1.0: a change to the output format, a rule id or a config key is a minor version,
+  listed under `Changed (breaking)`; exit codes still change only in a major version
+  (`docs/versioning.md`).
 
 ## [0.5.0] - 2026-11-03
 

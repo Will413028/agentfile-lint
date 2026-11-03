@@ -106,10 +106,13 @@ agentfile-lint --warn-as-error
 Other commands:
 
 ```sh
-agentfile-lint check-pins            # every reference to this tool pins the same full commit SHA
+agentfile-lint check-pins            # (experimental) every reference to this tool pins the same full commit SHA
 agentfile-lint config --format json  # the effective merged configuration, sorted keys
 agentfile-lint vendor --to DIR       # a pinned, self-contained copy (see below)
 ```
+
+Experimental commands may change their output and options in any minor release; everything else
+follows [`docs/versioning.md`](docs/versioning.md).
 
 Output is one line per finding: `file:line: rule-id: message`. Findings about a whole file use
 line `0` (printed as `:0`). Errors go to stderr, warnings to stdout. Exit codes: `0` no errors,
@@ -216,6 +219,7 @@ and HEAD of the source checkout, else `untagged`), `--force` (replace a non-empt
   (sorted order, fixed newlines, no timestamps, no machine paths or user names).
 - `python3 <dir>/verify.py` recomputes the hashes and fails (exit 1, naming the file) on a
   modified, missing or unlisted file.
+- `vendor` and `verify.py` are part of the compatibility contract (`docs/versioning.md`).
 
 Known limitation: verification only detects accidental modification. A deliberate change can edit
 the files and the manifest together, so it is not tamper-proof. The real gate is review of the
