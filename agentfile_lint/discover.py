@@ -1,6 +1,8 @@
 """File discovery: tracked instruction files only, always the full set (never just argv)."""
 from __future__ import annotations
 
+import os
+import posixpath
 import re
 import subprocess
 from pathlib import Path
@@ -68,17 +70,32 @@ def instruction_files(root: Path, globs: list[str]) -> list[str]:
     return [p for p in tracked_files(root) if matches(p, globs) and (root / p).is_file()]
 
 
-def aliases(root: Path, paths: list[str]) -> dict[str, str]:
-    """Symlinked paths that resolve to the same file as another path in `paths`: alias -> kept path.
+def _nested(a: str, b: str) -> bool:
+    """One path sits in a strict ancestor directory of the other."""
+    da, db = posixpath.dirname(a), posixpath.dirname(b)
+    if da == db:
+        return False
+    return da == "" or db == "" or db.startswith(da + "/") or da.startswith(db + "/")
 
-    A symlink such as `CLAUDE.md -> AGENTS.md` is the same file under a second name, so it is analyzed
-    once. Per resolved file the kept path is the first non-symlink, else the first symlink in sort order.
+
+def aliases(root: Path, paths: list[str]) -> dict[str, str]:
+    """Symlinked paths that are the same file as another path in `paths`: alias -> kept path.
+
+    A symlink such as `CLAUDE.md -> AGENTS.md` is the same file under a second name that a different
+    agent loads, so it is analyzed once. Per file (device and inode, so case-insensitive file systems
+    agree) the kept path is the first non-symlink, else the shallowest symlink. A symlink in an ancestor
+    or descendant directory of the kept path is not an alias: agents load both, so R5 reports it.
     """
-    groups: dict[Path, list[str]] = {}
+    groups: dict[tuple[int, int], list[str]] = {}
     for path in paths:
-        groups.setdefault((root / path).resolve(), []).append(path)
+        try:
+            st = os.stat(root / path)
+        except OSError:
+            continue
+        groups.setdefault((st.st_dev, st.st_ino), []).append(path)
     out: dict[str, str] = {}
     for members in groups.values():
-        kept = next((p for p in members if not (root / p).is_symlink()), members[0])
-        out.update({p: kept for p in members if p != kept})
+        real = [p for p in members if not (root / p).is_symlink()]
+        kept = real[0] if real else min(members, key=lambda p: (p.count("/"), p))
+        out.update({p: kept for p in members if p != kept and (root / p).is_symlink() and not _nested(p, kept)})
     return out

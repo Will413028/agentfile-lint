@@ -32,7 +32,7 @@ def analyze(root: Path, config: Config, today: datetime.date, warn_as_error: boo
             texts[path] = (root / path).read_text(encoding="utf-8")  # text mode, like the legacy checker
         except UnicodeDecodeError:
             findings.append(Finding(path, 0, "input", "file is not valid UTF-8"))
-    ctx = Context(root, discover.tracked_files(root), texts)
+    ctx = Context(root, discover.tracked_files(root), texts, alias)
     for rule_id, module in RULES.items():
         params = config.rules[rule_id]
         level = params["level"]
