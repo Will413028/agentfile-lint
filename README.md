@@ -2,14 +2,16 @@
 
 A linter for agent instruction files (`AGENTS.md`, `CLAUDE.md`) that a team runs the same way in every
 repository: rules are data in one TOML file, exceptions expire, and the runner is plain Python with no
-dependencies, so the git hook, CI and a vendored copy give the same answer.
+dependencies, so the git hook, CI and a vendored copy give the same answer. It checks `AGENTS.md`
+and `CLAUDE.md` today; `SKILL.md`, hooks and MCP config are next if it proves useful.
 
 ```sh
 uvx agentfile-lint        # in any git repository; no config needed
 ```
 
-Status: version 0.4.0 is on PyPI; the output below is from `dev`, whose changes (including these
-defaults) are listed in the CHANGELOG under Unreleased.
+Status: PyPI has 0.4.0, which still runs the older, noisier defaults and has no `preset:strict`. The
+output below is from `dev` (changes listed in the CHANGELOG under Unreleased); until the next release,
+run it with `uvx --from git+https://github.com/Will413028/agentfile-lint@dev agentfile-lint`.
 
 With no config it runs only checks whose findings are facts. From a demo repository:
 
@@ -92,8 +94,7 @@ documented" means the documentation does not say, not that the feature is missin
 
 Choose agnix for breadth (many file types, IDE plugins, auto-fix). Choose agentfile-lint to run one
 small, pinned set of rules across many repositories: exceptions expire, the checker can be vendored
-and verified, and the output and exit codes are a tested contract. Next for this project, if it is useful to others: `SKILL.md`, hooks and
-MCP config.
+and verified, and the output and exit codes are a tested contract.
 
 ## Usage
 

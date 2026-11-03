@@ -149,9 +149,9 @@ other agent read the same text, kept in one place.
 Default: off. It is this tool's convention, not an error: many repositories keep real content in
 `CLAUDE.md` on purpose. `mode = "forbid"` requires that there is no `CLAUDE.md` at all.
 
-Measured: not a false-positive rate. On the tuning sample all 30 findings with 0.4.0 were repositories
-that keep content in `CLAUDE.md`; 0.5.0 with `preset:strict` reports 26, because it accepts a symlink to
-`AGENTS.md` as the import.
+Measured: not a false-positive rate. On the tuning sample 0.4.0 reported 30 findings, all differences
+of convention: a `CLAUDE.md` with its own content, or a `CLAUDE.md` symlinked to `AGENTS.md`, which 0.4.0
+did not recognize as the import. 0.5.0 with `preset:strict` reports 26 of them.
 
 ## allowlist
 
