@@ -6,7 +6,7 @@ only with `preset:strict`, and how often it was wrong when measured. Every key i
 
 Every rule in the table except `allowlist` has an id and an alias (the name after the level in
 `--list-rules`); `allowlist` and `E0` have only their id. The alias works wherever the id does: `[rules.size]`
-is `[rules.R1]`, and an allowlist entry may say `rule = "size"`. Each config file is resolved on its
+is `[rules.R1]`, an allowlist entry may say `rule = "size"`, and an override may say `rules = { size = "warn" }`. Each config file is resolved on its
 own before merging, so a repo's `[rules.size]` overrides a preset's `[rules.R1]`; one file that names a
 rule both ways fails (exit 2). Findings and error messages always print the id.
 
@@ -129,8 +129,10 @@ skipped. `preset:strict` also compares different names and files in one director
 Measured, default pairs (held-out sample): 0 of 13 false positives (Wilson 95%: 0% to 22.8%), from two
 repositories; one false positive would have failed the 30% bar. Known false-positive class: in the
 tuning sample, all 54 same-name findings came from one repository and were deliberate copies
-(translations under `docs/<language>/`, `examples/`). R5 has no path exclusion; such a repository turns
-R5 off or lists the copies in the allowlist.
+(translations under `docs/<language>/`, `examples/`). Such a repository turns R5 off for those paths with
+`[[overrides]]` (`paths = ["docs/**", "examples/**"]`, `rules = { duplicates = "off" }`). An override
+silences the findings on the files it matches: with `preset:strict`, the sibling comparison still reports
+the original outside those paths, since its finding is on that file.
 
 Measured, strict pairs (tuning sample, 0.4.0): 20 of 20 false positives. 11 of them were a file compared
 with its own symlink, fixed in 0.5.0; the other 9 were translations, templates and examples, 9 of 9
@@ -161,8 +163,12 @@ did not recognize as the import. 0.5.0 with `preset:strict` reports 26 of them.
 
 ## allowlist
 
-Why: an exception without an end date becomes permanent. Every entry has a reason and an expiry date at
-most `max_days` (90) ahead; an expired entry, or one that no longer suppresses anything, fails.
+Why: a debt exception without an end date becomes permanent without anyone deciding so. Every allowlist
+entry has a reason and an expiry date at most `max_days` (90) ahead; an expired entry, or one that no
+longer suppresses anything, fails. A path that is meant to differ for good goes in `[[overrides]]`
+instead, with a required reason; each glob of an override in the config file the run loads (not one
+reached through `extends`) that matches no analyzed instruction file is a warning, so a stale override
+shows up without failing CI unless `--warn-as-error` is given.
 
 Default: on, from your config only; with no entries it reports nothing. Entries warn `warn_days` (14)
 before they expire, so run CI on a weekly schedule.

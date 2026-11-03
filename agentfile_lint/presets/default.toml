@@ -2,6 +2,8 @@
 # It runs only objective checks; the heuristic rules (R3b, R4, R6, R5 between siblings) and the C1
 # convention are `off` here and turned on by `extends = ["preset:strict"]` (presets/strict.toml).
 extends = []
+# Shipped presets carry no [[overrides]]: overrides concatenate under `extends`, so a repository could
+# not undo one inherited from here. Overrides belong in the repository's own config (docs/design.md).
 
 [discover]
 globs = ["AGENTS.md", "**/AGENTS.md", "CLAUDE.md", "**/CLAUDE.md"]

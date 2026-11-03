@@ -3,8 +3,8 @@
 ## Problem
 
 Agent instruction files are loaded whole whenever an agent works in their directory, so they
-need budgets, and they rot: duplicated text, stale references, one-off exceptions that never
-expire. A review checklist does not hold. A deterministic check that runs in the same way
+need budgets, and they rot: duplicated text, stale references, one-off exceptions that nobody
+decided to keep. A review checklist does not hold. A deterministic check that runs in the same way
 locally and in CI does.
 
 ## Goals
@@ -12,8 +12,9 @@ locally and in CI does.
 - One rule file (TOML) plus a thin Python runner; no third-party dependencies at run time.
 - The local hook and CI run the same program, the same rules, the same version.
 - Three levels per rule: `error` (blocks), `warn` (prints), `off`.
-- Exceptions are time-boxed: every allowlist entry has a reason and an expiry date, and the
-  list can only shrink.
+- Debt exceptions are time-boxed: every allowlist entry has a reason and an expiry date, and the
+  list can only shrink. Permanent path scopes (`[[overrides]]`) live in the config with a required
+  reason and can only lower a level.
 - Reproducible: same input and same injected date give the same output. No network, no telemetry.
 
 ## Non-goals
@@ -29,12 +30,15 @@ locally and in CI does.
 
 ```
 preset (shipped) <- repo config (.agentfile-lint.toml, `extends`) -> effective config
-effective config + git ls-files (full set) -> rules -> findings -> allowlist -> output + exit code
+effective config + git ls-files (full set) -> rules -> findings -> overrides -> allowlist -> output + exit code
 ```
 
 - Rules are data: a rule module reads parameters, and repo-specific behaviour is never a
   branch in code. Differences between repositories are config values.
 - Merge: tables merge key by key (the child wins); every other value, lists included, is replaced.
+  The one exception is `[[overrides]]`: the lists concatenate, parents first, because replacing them
+  would silently drop the overrides of the config a file extends. A child therefore cannot undo an
+  inherited override, so the shipped presets carry none.
 - Unknown keys, unknown rule ids and malformed allowlist entries fail the configuration (exit 2).
   A typo must not silently disable a check.
 
@@ -137,6 +141,26 @@ Fenced code blocks and HTML comments are ignored by every text rule.
 
 A finding carries its own level and the rule level caps it: a rule at `warn` never produces an error,
 and a rule at `error` can still report some findings (R4 narrative words, R5 siblings, R6) as warnings.
+
+## Overrides
+
+Each entry: `paths` (globs), `rules` (rule id or alias -> `warn` or `off`), `reason` (docs/adr/0004).
+
+- An override changes levels only, never rule parameters, and only lowers: `error` fails the
+  configuration. For one file and one rule the lowest of the rule level and every matching override
+  applies, so entry order does not matter. `E0` and `allowlist` cannot be overridden.
+- It applies to the findings reported on the files it matches; those files stay in the input of
+  cross-file rules (`path_limits` still counts them, R5 still compares them), so a finding on a file
+  outside the paths is still reported.
+- Overrides run before the allowlist: an allowlist entry for a finding an override drops is no longer
+  needed.
+- Each glob of the config file the run loads directly (`.agentfile-lint.toml` or `--config`) must match
+  an analyzed instruction file; otherwise a warning (rule `allowlist`, whole file, on that config file:
+  repo-relative inside the repository, as given outside it, naming `overrides[i]` by its index in that
+  file). Entries reached through `extends` are not checked: a shared config serves repositories that do
+  not all have every path.
+- A same-directory alias (a `CLAUDE.md` symlink to `AGENTS.md`) is not analyzed, so an override names
+  the target file; a glob that matches only the alias gets the stale warning.
 
 ## Allowlist
 

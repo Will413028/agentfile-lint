@@ -75,8 +75,8 @@ repeats three lines of the root one.
 
 **A known false positive (R5).** One tuning repository keeps translated copies of its instruction files
 under `docs/<language>/` and examples under `examples/`. All 54 same-name findings there are deliberate
-copies. R5 has no path exclusion, so such a repository turns R5 off or lists the copies in the
-allowlist (`docs/rules.md`, R5).
+copies. Since 0.6.0 such a repository turns R5 off for those paths with `[[overrides]]`
+(`docs/rules.md`, R5).
 
 With `preset:strict`, the real ones among the sampled candidates:
 

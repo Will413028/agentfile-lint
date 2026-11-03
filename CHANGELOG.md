@@ -19,8 +19,13 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `[[overrides]]`: permanent path scopes, each with `paths` (globs), `rules` (a rule id or alias mapped
+  to `warn` or `off`) and a required `reason`. An override only lowers a level; for one file and rule
+  the lowest applies. Under `extends` the lists concatenate (the one list that does not replace). A glob
+  in the directly loaded config that matches no instruction file is an `allowlist` warning. This is the
+  remedy for R5's translated and example copies short of turning R5 off (docs/adr/0004).
 - Rule aliases: a rule's name from `--list-rules` (`size` for R1) works wherever its id does, in
-  `[rules.<id>]` and an allowlist `rule` (`E0` and `allowlist` have no alias). Each config file is resolved before merging; one file naming
+  `[rules.<id>]`, an allowlist `rule` and override `rules` (`E0` and `allowlist` have no alias). Each config file is resolved before merging; one file naming
   a rule by both fails (exit 2). Findings still print the id.
 - `--format json`: one document, `{"version": 1, "findings": [...]}`, each finding with `file`, `line`
   (`null` for a whole file), `level` (`error` or `warning`), `rule` and `message`. `version` goes up

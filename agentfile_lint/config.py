@@ -1,7 +1,8 @@
 """Configuration: shipped preset + optional repo config with `extends`; unknown keys fail.
 
 Merge rule: tables merge key by key (the child wins); every other value, lists included,
-is replaced as a whole.
+is replaced as a whole. The one exception is `[[overrides]]`: lists concatenate (parents first), since
+replacing them would silently drop the overrides of the config a file extends.
 """
 from __future__ import annotations
 
@@ -12,8 +13,8 @@ from importlib import resources
 from pathlib import Path
 from typing import Any
 
-from . import allowlist
-from .errors import LEVELS, ConfigError, check_keys, expect_int, expect_str, expect_str_list
+from . import allowlist, overrides as overrides_mod
+from .errors import LEVELS, ConfigError, check_keys, expect_int, expect_str, expect_str_list, expect_table_list
 from .finding import INPUT_RULE
 from .rules import ALIASES, RULES
 
@@ -22,7 +23,7 @@ CONFIG_NAME = ".agentfile-lint.toml"
 LEGACY_CONFIG_NAME = ".instruction-lint.toml"
 PRESET_PREFIX = "preset:"
 DEFAULT_PRESET = "preset:default"
-_TOP_KEYS = {"extends", "discover", "allowlist", "rules", "check_pins"}
+_TOP_KEYS = {"extends", "discover", "allowlist", "rules", "overrides", "check_pins"}
 PIN_DEFAULTS = {
     "repo": "agentfile-lint",
     "files": [
@@ -54,6 +55,7 @@ class Config:
     entries: list[allowlist.Entry]
     rules: dict[str, dict[str, Any]]  # rule id -> validated params, including "level"
     check_pins: dict[str, Any] = field(default_factory=lambda: dict(PIN_DEFAULTS))  # repo, files
+    overrides: list[overrides_mod.Override] = field(default_factory=list)
 
 
 def to_jsonable(cfg: "Config") -> dict[str, Any]:
@@ -70,6 +72,7 @@ def to_jsonable(cfg: "Config") -> dict[str, Any]:
             ],
         },
         "rules": cfg.rules,
+        "overrides": [{"paths": list(o.paths), "rules": dict(o.rules), "reason": o.reason} for o in cfg.overrides],
         "check_pins": cfg.check_pins,
     }
 
@@ -119,10 +122,18 @@ def _load_raw(ref: str, base_dir: Path | None, seen: tuple[str, ...]) -> dict[st
     if not isinstance(extends, list) or not all(isinstance(e, str) for e in extends):
         raise ConfigError(f"{ref}: extends must be a list of strings")
     merged: dict[str, Any] = {}
+    inherited: list[tuple[Any, str | None, int]] = []
     for parent in extends:
-        merged = _merge(merged, _load_raw(parent, base_dir, seen + (key,)))
+        parent_raw = _load_raw(parent, base_dir, seen + (key,))
+        inherited += parent_raw.pop("overrides")
+        merged = _merge(merged, parent_raw)
     own = _resolve_aliases({k: v for k, v in data.items() if k != "extends"}, ref)
-    return _merge(merged, own)
+    own_overrides = expect_table_list(own.pop("overrides", []), f"{ref}: overrides")
+    # Only the file this run loads directly is checked for stale globs.
+    direct = not seen and not ref.startswith(PRESET_PREFIX)
+    merged = _merge(merged, own)
+    merged["overrides"] = inherited + [(entry, ref, i, direct) for i, entry in enumerate(own_overrides)]
+    return merged
 
 
 def _resolve_aliases(data: dict[str, Any], source: str) -> dict[str, Any]:
@@ -149,6 +160,24 @@ def _resolve_aliases(data: dict[str, Any], source: str) -> dict[str, Any]:
             for e in al["entries"]
         ]
         data = {**data, "allowlist": {**al, "entries": entries}}
+    ov = data.get("overrides")
+    if isinstance(ov, list):
+        resolved_ov = []
+        for i, entry in enumerate(ov):
+            if isinstance(entry, dict) and isinstance(entry.get("rules"), dict):
+                levels: dict[str, Any] = {}
+                written = {}
+                for key, value in entry["rules"].items():
+                    rule_id = ALIASES.get(key, key)
+                    if rule_id in levels:
+                        raise ConfigError(
+                            f"{source}: overrides[{i}].rules.{written[rule_id]} and .{key} name the same rule; use one"
+                        )
+                    levels[rule_id] = value
+                    written[rule_id] = key
+                entry = {**entry, "rules": levels}
+            resolved_ov.append(entry)
+        data = {**data, "overrides": resolved_ov}
     return data
 
 
@@ -195,4 +224,5 @@ def _validate(raw: dict[str, Any], today: datetime.date) -> Config:
         "repo": expect_str(pins.get("repo", PIN_DEFAULTS["repo"]), "check_pins.repo"),
         "files": expect_str_list(pins.get("files", PIN_DEFAULTS["files"]), "check_pins.files"),
     }
-    return Config(globs=globs, allowlist=settings, entries=entries, rules=rules, check_pins=pins)
+    overrides = overrides_mod.parse(raw.get("overrides", []), set(RULES))
+    return Config(globs=globs, allowlist=settings, entries=entries, rules=rules, check_pins=pins, overrides=overrides)
