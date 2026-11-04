@@ -27,6 +27,11 @@ versions follow [Semantic Versioning](https://semver.org/).
   reports an error asking to lower `count`. In 0.6.0 one entry hid every finding of its rule in the
   file, including an R1 path error behind a line-count exception.
 
+### Graduated
+
+- `R1a`: split from R1 (shipped at `error` since 0.1.0); per-file bytes, no default limit.
+- `R1c`: split from R1 (shipped at `error` since 0.1.0); the 32 KiB combined size on a path.
+
 ## [0.6.0] - 2026-11-04
 
 ### Changed (breaking)

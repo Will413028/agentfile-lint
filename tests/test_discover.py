@@ -6,7 +6,7 @@ from agentfile_lint import discover
 
 GLOBS = ["AGENTS.md", "**/AGENTS.md", "CLAUDE.md", "**/CLAUDE.md"]
 BIG = "x" * 600 + "\n"
-R1_LINE = {".agentfile-lint.toml": "[rules.R1]\nmax_line_chars = 500\n"}  # BIG violates it, if analyzed
+R1_LINE = {".agentfile-lint.toml": "[rules.R1d]\nlevel = \"error\"\nmax_chars = 500\n"}  # BIG violates it, if analyzed
 
 
 class DiscoverTest(unittest.TestCase):
@@ -47,7 +47,7 @@ class DiscoverTest(unittest.TestCase):
         root = helpers.make_repo({"AGENTS.md": "ok\n", "sub/AGENTS.md": BIG, "README.md": "r\n", **R1_LINE})
         r = helpers.run_new(root, "AGENTS.md")
         self.assertEqual(r.returncode, 1)
-        self.assertIn("sub/AGENTS.md:1: error: R1", r.stdout)
+        self.assertIn("sub/AGENTS.md:1: error: R1d", r.stdout)
         # An irrelevant file name skips the run entirely.
         self.assertEqual(helpers.run_new(root, "README.md").returncode, 0)
 

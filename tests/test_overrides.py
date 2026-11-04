@@ -6,7 +6,7 @@ from importlib import resources
 
 import helpers
 
-# A translated copy under docs/<lang>/ duplicates the root file: R5 (duplicates) reports it.
+# A translated copy under docs/<lang>/ duplicates the root file: R5b (sibling-duplicates) reports it under preset:strict.
 BODY = "# Package\n\n" + "".join(f"- rule number {i}: run the full test suite before every commit\n" for i in range(3))
 # Siblings (neither is an ancestor of the other): preset:strict compares them.
 TRANSLATED = {"AGENTS.md": "ok\n", "pkg/AGENTS.md": BODY, "docs/zh/AGENTS.md": BODY}
@@ -24,7 +24,7 @@ def config_json(toml):
 
 
 def r5(lines):
-    return [line for line in lines if ": R5: " in line]
+    return [line for line in lines if ": R5b: " in line]
 
 
 class ScopeTest(unittest.TestCase):
@@ -34,7 +34,7 @@ class ScopeTest(unittest.TestCase):
         self.assertTrue(any(line.startswith("docs/zh/AGENTS.md") for line in r5(warnings + errors)), r.stdout)
 
     def test_off_silences_the_path_and_keeps_the_original(self):
-        r = run({**TRANSLATED, ".agentfile-lint.toml": STRICT + OFF_DOCS.format(rules='duplicates = "off"')})
+        r = run({**TRANSLATED, ".agentfile-lint.toml": STRICT + OFF_DOCS.format(rules='sibling-duplicates = "off"')})
         warnings, errors = helpers.by_severity(r)
         found = r5(warnings + errors)
         self.assertFalse([line for line in found if line.startswith("docs/")], r.stdout)
@@ -43,27 +43,27 @@ class ScopeTest(unittest.TestCase):
 
     def test_warn_lowers_an_error(self):
         files = {"AGENTS.md": "x\n" * 300, "docs/AGENTS.md": "x\n" * 300}
-        rule = '[rules.R1]\nlevel = "error"\n[[rules.R1.limits]]\nglob = "**/AGENTS.md"\nmax_lines = 200\n'
-        toml = rule + OFF_DOCS.format(rules='R1 = "warn"')
+        rule = '[rules.R1b]\nlevel = "error"\n[[rules.R1b.limits]]\nglob = "**/AGENTS.md"\nmax_lines = 200\n'
+        toml = rule + OFF_DOCS.format(rules='R1b = "warn"')
         r = run({**files, ".agentfile-lint.toml": toml})
         warnings, errors = helpers.by_severity(r)
-        self.assertEqual([e.split(":")[0] for e in errors if ": R1: " in e], ["AGENTS.md"], r.stdout)
-        self.assertEqual([w.split(":")[0] for w in warnings if ": R1: " in w], ["docs/AGENTS.md"], r.stdout)
+        self.assertEqual([e.split(":")[0] for e in errors if ": R1b: " in e], ["AGENTS.md"], r.stdout)
+        self.assertEqual([w.split(":")[0] for w in warnings if ": R1b: " in w], ["docs/AGENTS.md"], r.stdout)
         self.assertEqual(r.returncode, 1)
 
     def test_lowest_level_wins_regardless_of_order(self):
-        warn = '[[overrides]]\npaths = ["docs/**"]\nrules = { R5 = "warn" }\nreason = "a"\n'
-        off = '[[overrides]]\npaths = ["docs/zh/*"]\nrules = { duplicates = "off" }\nreason = "b"\n'
+        warn = '[[overrides]]\npaths = ["docs/**"]\nrules = { R5b = "warn" }\nreason = "a"\n'
+        off = '[[overrides]]\npaths = ["docs/zh/*"]\nrules = { sibling-duplicates = "off" }\nreason = "b"\n'
         for toml in (STRICT + warn + off, STRICT + off + warn):
             r = run({**TRANSLATED, ".agentfile-lint.toml": toml})
             warnings, errors = helpers.by_severity(r)
             self.assertFalse([line for line in r5(warnings + errors) if line.startswith("docs/")], (toml, r.stdout))
 
     def test_allowlist_entry_on_an_overridden_path_is_no_longer_needed(self):
-        entry = ('[[allowlist.entries]]\nrule = "R5"\npath = "docs/zh/AGENTS.md"\nreason = "r"\n'
+        entry = ('[[allowlist.entries]]\nrule = "R5b"\npath = "docs/zh/AGENTS.md"\nreason = "r"\n'
                  'expires = 2026-07-01\n')
-        r = run({**TRANSLATED, ".agentfile-lint.toml": STRICT + OFF_DOCS.format(rules='R5 = "off"') + entry})
-        self.assertIn("docs/zh/AGENTS.md: error: allowlist: entry for R5 is no longer needed", r.stdout)
+        r = run({**TRANSLATED, ".agentfile-lint.toml": STRICT + OFF_DOCS.format(rules='R5b = "off"') + entry})
+        self.assertIn("docs/zh/AGENTS.md: error: allowlist: entry for R5b is no longer needed", r.stdout)
         self.assertEqual(r.returncode, 1)
 
 
@@ -76,13 +76,13 @@ class ValidationTest(unittest.TestCase):
             self.assertIn(needle, r.stderr)
 
     def test_error_level_fails(self):
-        self.assert_config_error(OFF_DOCS.format(rules='R5 = "error"'), "overrides[0].rules.R5")
+        self.assert_config_error(OFF_DOCS.format(rules='R5b = "error"'), "overrides[0].rules.R5b")
 
     def test_missing_reason_fails(self):
-        self.assert_config_error('[[overrides]]\npaths = ["docs/**"]\nrules = { R5 = "off" }\n', "overrides[0]", "reason")
+        self.assert_config_error('[[overrides]]\npaths = ["docs/**"]\nrules = { R5b = "off" }\n', "overrides[0]", "reason")
 
     def test_unknown_key_fails(self):
-        self.assert_config_error(OFF_DOCS.format(rules='R5 = "off"') + 'expires = 2026-07-01\n', "expires")
+        self.assert_config_error(OFF_DOCS.format(rules='R5b = "off"') + 'expires = 2026-07-01\n', "expires")
 
     def test_unknown_rule_fails(self):
         self.assert_config_error(OFF_DOCS.format(rules='R99 = "off"'), "R99")
@@ -92,17 +92,17 @@ class ValidationTest(unittest.TestCase):
         self.assert_config_error(OFF_DOCS.format(rules='allowlist = "off"'), "allowlist")
 
     def test_empty_paths_or_rules_fail(self):
-        self.assert_config_error('[[overrides]]\npaths = []\nrules = { R5 = "off" }\nreason = "r"\n', "paths")
+        self.assert_config_error('[[overrides]]\npaths = []\nrules = { R5b = "off" }\nreason = "r"\n', "paths")
         self.assert_config_error('[[overrides]]\npaths = ["docs/**"]\nrules = {}\nreason = "r"\n', "rules")
 
     def test_id_and_alias_in_one_entry_fail(self):
-        self.assert_config_error(OFF_DOCS.format(rules='R5 = "off", duplicates = "warn"'), "R5", "duplicates")
+        self.assert_config_error(OFF_DOCS.format(rules='R5b = "off", sibling-duplicates = "warn"'), "R5b", "sibling-duplicates")
 
     def test_alias_resolves_in_effective_config(self):
-        r = config_json(OFF_DOCS.format(rules='duplicates = "off"'))
+        r = config_json(OFF_DOCS.format(rules='sibling-duplicates = "off"'))
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(json.loads(r.stdout)["overrides"],
-                         [{"paths": ["docs/**"], "rules": {"R5": "off"}, "reason": "translations"}])
+                         [{"paths": ["docs/**"], "rules": {"R5b": "off"}, "reason": "translations"}])
 
     def test_shipped_presets_carry_no_overrides(self):
         presets = resources.files("agentfile_lint") / "presets"
@@ -113,7 +113,7 @@ class ValidationTest(unittest.TestCase):
 
 
 class StaleGlobTest(unittest.TestCase):
-    TOML = '[[overrides]]\npaths = ["docs/**", "gone/**"]\nrules = { R5 = "off" }\nreason = "r"\n'
+    TOML = '[[overrides]]\npaths = ["docs/**", "gone/**"]\nrules = { R5b = "off" }\nreason = "r"\n'
 
     def test_unmatched_glob_warns(self):
         r = run({**TRANSLATED, ".agentfile-lint.toml": self.TOML})
@@ -130,7 +130,7 @@ class StaleGlobTest(unittest.TestCase):
         self.assertIn("error: allowlist: overrides[0]: glob 'gone/**'", r.stdout)
 
     def test_index_counts_within_the_file(self):
-        first = '[[overrides]]\npaths = ["docs/**"]\nrules = { R5 = "off" }\nreason = "r"\n'
+        first = '[[overrides]]\npaths = ["docs/**"]\nrules = { R5b = "off" }\nreason = "r"\n'
         r = run({**TRANSLATED, ".agentfile-lint.toml": first + self.TOML.replace('"docs/**", ', "")})
         self.assertIn("overrides[1]: glob 'gone/**'", r.stdout)
 
@@ -151,8 +151,8 @@ class StaleGlobTest(unittest.TestCase):
 
 class ExtendsTest(unittest.TestCase):
     def test_overrides_concatenate(self):
-        shared = '[[overrides]]\npaths = ["docs/**"]\nrules = { R5 = "off" }\nreason = "shared"\n'
-        own = '[[overrides]]\npaths = ["examples/**"]\nrules = { R1 = "warn" }\nreason = "own"\n'
+        shared = '[[overrides]]\npaths = ["docs/**"]\nrules = { R5b = "off" }\nreason = "shared"\n'
+        own = '[[overrides]]\npaths = ["examples/**"]\nrules = { R1b = "warn" }\nreason = "own"\n'
         root = helpers.make_repo({"AGENTS.md": "ok\n", ".agentfile-lint.toml": 'extends = ["s.toml"]\n' + own,
                                   "s.toml": shared})
         r = helpers.run_new(root, "config")
@@ -161,7 +161,7 @@ class ExtendsTest(unittest.TestCase):
 
     def test_inherited_override_applies(self):
         r = run({**TRANSLATED, ".agentfile-lint.toml": 'extends = ["preset:strict", "s.toml"]\n',
-                 "s.toml": 'extends = []\n' + OFF_DOCS.format(rules='R5 = "off"')})
+                 "s.toml": 'extends = []\n' + OFF_DOCS.format(rules='R5b = "off"')})
         warnings, errors = helpers.by_severity(r)
         self.assertFalse([line for line in r5(warnings + errors) if line.startswith("docs/")], r.stdout)
 
@@ -169,13 +169,13 @@ class ExtendsTest(unittest.TestCase):
 class ReviewFixesTest(unittest.TestCase):
     def test_inherited_error_names_its_file(self):
         root = helpers.make_repo({"AGENTS.md": "ok\n", ".agentfile-lint.toml": 'extends = ["shared.toml"]\n',
-                                  "shared.toml": '[[overrides]]\npaths = ["docs/**"]\nrules = { R5 = "off" }\n'})
+                                  "shared.toml": '[[overrides]]\npaths = ["docs/**"]\nrules = { R5b = "off" }\n'})
         r = helpers.run_new(root)
         self.assertEqual(r.returncode, 2)
         self.assertIn("shared.toml: overrides[0]: missing key reason", r.stderr)
 
     def test_diamond_extends_counts_a_shared_override_once(self):
-        shared = '[[overrides]]\npaths = ["docs/**"]\nrules = { R5 = "off" }\nreason = "shared"\n'
+        shared = '[[overrides]]\npaths = ["docs/**"]\nrules = { R5b = "off" }\nreason = "shared"\n'
         root = helpers.make_repo({"AGENTS.md": "ok\n", ".agentfile-lint.toml": 'extends = ["a.toml", "b.toml"]\n',
                                   "a.toml": 'extends = ["s.toml"]\n', "b.toml": 'extends = ["s.toml"]\n', "s.toml": shared})
         r = helpers.run_new(root, "config")
