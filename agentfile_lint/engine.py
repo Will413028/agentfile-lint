@@ -5,10 +5,10 @@ import datetime
 from dataclasses import replace
 from pathlib import Path
 
-from . import allowlist, discover
+from . import allowlist, discover, overrides
 from .config import Config
 from .context import Context
-from .finding import Finding
+from .finding import INPUT_RULE, Finding
 from .rules import RULES
 
 
@@ -29,9 +29,9 @@ def analyze(root: Path, config: Config, today: datetime.date, warn_as_error: boo
     texts: dict[str, str] = {}
     for path in paths:
         try:
-            texts[path] = (root / path).read_text(encoding="utf-8")  # text mode, like the legacy checker
+            texts[path] = (root / path).read_text(encoding="utf-8")  # text mode; R1 rereads the raw bytes (docs/adr/0004)
         except UnicodeDecodeError:
-            findings.append(Finding(path, 0, "input", "file is not valid UTF-8"))
+            findings.append(Finding(path, 0, INPUT_RULE, "file is not valid UTF-8"))
     ctx = Context(root, discover.tracked_files(root), texts)
     for rule_id, module in RULES.items():
         params = config.rules[rule_id]
@@ -45,7 +45,10 @@ def analyze(root: Path, config: Config, today: datetime.date, warn_as_error: boo
         if hasattr(module, "check_repo"):
             raw.extend(module.check_repo(ctx, params))
         findings.extend(replace(f, level=_level(level, f)) for f in raw)
+    # Overrides before the allowlist: an entry for a path an override silences is no longer needed.
+    findings = overrides.apply(findings, config.overrides)
     findings = allowlist.apply(findings, config.entries, config.allowlist, set(paths), today)
+    findings += overrides.stale(config.overrides, set(paths), root)
     if warn_as_error:
         findings = [replace(f, level="error") for f in findings]
     return sorted(findings, key=Finding.sort_key)

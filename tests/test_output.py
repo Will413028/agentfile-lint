@@ -1,0 +1,162 @@
+"""Output contract (docs/design.md, Output and exit codes; docs/adr/0004 decision 1 and 2).
+
+Text: `file:line: severity: rule-id: message`, or `file: severity: rule-id: message` for a whole-file
+finding, all on stdout. `--format json` and `--format github` carry the same findings.
+"""
+from __future__ import annotations
+
+import json
+import unittest
+
+import helpers
+from agentfile_lint.finding import Finding, format_github
+
+# A line R5 reports (>= 40 characters) that holds every character GitHub escaping cares about in a message.
+SHARED = "Use 100% of the budget: split it a, b and c across the files"
+CONFIG = (
+    "[rules.R1]\nmax_line_chars = 500\n"
+    '[[rules.R1.limits]]\nglob = "AGENTS.md"\nmax_lines = 1\nlines_level = "warn"\n'
+)
+FILES = {
+    "AGENTS.md": SHARED + "\n" + "y" * 600 + "\n",  # whole-file warning (2 lines) and a line error
+    "a,b/AGENTS.md": SHARED + "\n",                  # R5 warning on a path with a comma
+    ".agentfile-lint.toml": CONFIG,
+}
+R5_MESSAGE = f"line repeats AGENTS.md:1 ('{SHARED}'); keep it in the ancestor only"
+TEXT = [
+    "AGENTS.md: warning: R1: file is 2 lines, limit 1",
+    "AGENTS.md:2: error: R1: line is 600 characters, limit 500",
+    f"a,b/AGENTS.md:1: warning: R5: {R5_MESSAGE}",
+]
+
+
+def run(files, *args):
+    return helpers.run_new(helpers.make_repo(files), "--today", "2026-06-01", *args)
+
+
+class TextFormatTest(unittest.TestCase):
+    def test_every_finding_on_stdout_with_its_severity(self):
+        r = run(FILES)
+        self.assertEqual((r.returncode, r.stderr), (1, ""))
+        self.assertEqual(r.stdout.splitlines(), TEXT)  # sorted by file, line, rule; errors and warnings mixed
+
+    def test_warn_as_error_prints_error(self):
+        r = run(FILES, "--warn-as-error")
+        self.assertEqual(r.returncode, 1)
+        self.assertEqual(r.stdout.splitlines(), [x.replace(": warning: ", ": error: ") for x in TEXT])
+
+    def test_format_text_is_the_default(self):
+        self.assertEqual(run(FILES, "--format", "text").stdout, run(FILES).stdout)
+
+    def test_non_ascii_output_survives_a_non_utf8_pipe(self):
+        # A Windows runner pipes stdout as cp1252; findings quote file text (here an R5 line in CJK).
+        line = "所有指令檔都必須通過檢查，否則持續整合會失敗並停止合併這個變更；例外要寫在設定檔並附上理由與期限"  # >= 40 chars
+        root = helpers.make_repo({"AGENTS.md": line + "\n", "sub/AGENTS.md": line + "\n"})
+        env = dict(helpers.os.environ, PYTHONPATH=str(helpers.REPO), PYTHONIOENCODING="cp1252")
+        for fmt in ("text", "json", "github"):
+            r = helpers.subprocess.run([helpers.sys.executable, "-m", "agentfile_lint", "--format", fmt],
+                                       cwd=root, env=env, capture_output=True)
+            self.assertEqual((r.returncode, r.stderr), (0, b""), fmt)
+            self.assertIn(line[:20].encode("utf-8"), r.stdout, fmt)  # R5 quotes the start of the line
+
+    def test_unknown_format_is_a_usage_error(self):
+        r = run(FILES, "--format", "sarif")
+        self.assertEqual((r.returncode, r.stdout), (2, ""))
+        self.assertIn("--format", r.stderr)
+
+
+class JsonFormatTest(unittest.TestCase):
+    def test_document_and_fields(self):
+        r = run(FILES, "--format", "json")
+        self.assertEqual((r.returncode, r.stderr), (1, ""))
+        self.assertEqual(json.loads(r.stdout), {
+            "version": 1,
+            "findings": [
+                {"file": "AGENTS.md", "line": None, "level": "warning", "rule": "R1", "message": "file is 2 lines, limit 1"},
+                {"file": "AGENTS.md", "line": 2, "level": "error", "rule": "R1", "message": "line is 600 characters, limit 500"},
+                {"file": "a,b/AGENTS.md", "line": 1, "level": "warning", "rule": "R5", "message": R5_MESSAGE},
+            ],
+        })
+
+    def test_no_findings_is_still_a_document(self):
+        clean = {"AGENTS.md": "ok\n"}
+        for args in ((), ("README.md",)):  # a run skipped for irrelevant file names prints one too
+            r = run({**clean, "README.md": "r\n"}, "--format", "json", *args)
+            self.assertEqual((r.returncode, r.stderr), (0, ""), args)
+            self.assertNotEqual(r.stdout, "", args)
+            self.assertEqual(json.loads(r.stdout), {"version": 1, "findings": []}, args)
+
+    def test_exit_code_follows_errors_not_the_format(self):
+        warn_only = {k: v for k, v in FILES.items() if k != "AGENTS.md"}
+        warn_only["AGENTS.md"] = SHARED + "\n"
+        for fmt in ("text", "json", "github"):
+            self.assertEqual(run(warn_only, "--format", fmt).returncode, 0, fmt)
+            self.assertEqual(run(FILES, "--format", fmt).returncode, 1, fmt)
+
+
+class GithubFormatTest(unittest.TestCase):
+    def test_workflow_commands(self):
+        r = run(FILES, "--format", "github")
+        self.assertEqual((r.returncode, r.stderr), (1, ""))
+        self.assertEqual(r.stdout.splitlines(), [
+            # Whole file: no `line`, so GitHub shows it on line 1; the message keeps the text line.
+            "::warning file=AGENTS.md,title=R1::AGENTS.md: warning: R1: file is 2 lines, limit 1",
+            "::error file=AGENTS.md,line=2,title=R1::AGENTS.md:2: error: R1: line is 600 characters, limit 500",
+            "::warning file=a%2Cb/AGENTS.md,line=1,title=R5::a,b/AGENTS.md:1: warning: R5: "
+            + R5_MESSAGE.replace("%", "%25"),
+        ])
+
+    def test_message_escaping(self):
+        # actions/toolkit escapeData: % \r \n; `:` and `,` stay as they are in a message.
+        for raw, escaped in (("%", "%25"), ("\r", "%0D"), ("\n", "%0A"), (":", ":"), (",", ",")):
+            with self.subTest(repr(raw)):
+                out = format_github(Finding("f.md", 3, "R1", f"a{raw}b"))
+                self.assertEqual(out, f"::error file=f.md,line=3,title=R1::f.md:3: error: R1: a{escaped}b")
+
+    def test_property_escaping(self):
+        # actions/toolkit escapeProperty: escapeData plus `:` and `,`.
+        for raw, escaped in (("%", "%25"), ("\r", "%0D"), ("\n", "%0A"), (":", "%3A"), (",", "%2C")):
+            with self.subTest(repr(raw)):
+                out = format_github(Finding(f"d{raw}/f.md", 0, f"R{raw}1", "m", level="warn"))
+                data = f"d{raw}/f.md: warning: R{raw}1: m".replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+                self.assertEqual(out, f"::warning file=d{escaped}/f.md,title=R{escaped}1::{data}")
+
+    def test_action_passes_format_github(self):
+        text = (helpers.REPO / "action.yml").read_text(encoding="utf-8")
+        self.assertIn("args=(--format github)", text)
+
+
+class InputRuleTest(unittest.TestCase):
+    """E0 (formerly `input`): an instruction file that is not valid UTF-8."""
+
+    BAD = {"AGENTS.md": b"ok\n\xff\xfe\n"}
+
+    def entry(self, rule):
+        return f'[[allowlist.entries]]\nrule = "{rule}"\npath = "AGENTS.md"\nreason = "binary for now"\nexpires = 2026-06-30\n'
+
+    def test_reported_as_e0(self):
+        r = run(self.BAD)
+        self.assertEqual((r.returncode, r.stdout, r.stderr), (1, "AGENTS.md: error: E0: file is not valid UTF-8\n", ""))
+
+    def test_an_allowlist_entry_may_name_e0(self):
+        r = run({**self.BAD, ".agentfile-lint.toml": self.entry("E0")})
+        self.assertEqual((r.returncode, r.stdout, r.stderr), (0, "", ""))
+
+    def test_the_old_name_input_is_unknown(self):
+        r = run({**self.BAD, ".agentfile-lint.toml": self.entry("input")})
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("unknown rule 'input'", r.stderr)
+
+    def test_rules_cannot_turn_e0_off(self):
+        r = run({**self.BAD, ".agentfile-lint.toml": '[rules.E0]\nlevel = "off"\n'})
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("rules: unknown key(s) E0", r.stderr)
+
+    def test_list_rules_lists_e0(self):
+        r = run({"AGENTS.md": "ok\n"}, "--list-rules")
+        self.assertEqual(r.returncode, 0)
+        self.assertRegex(r.stdout, r"(?m)^E0  error  ")
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -6,7 +6,7 @@ import helpers
 class SelfCheckTest(unittest.TestCase):
     def test_this_repos_own_instruction_files_pass(self):
         r = helpers.run_new(helpers.REPO)
-        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
     def test_own_agents_md_passes_in_a_tracked_copy(self):
         # Non-vacuous even before the file is committed: analyze a tracked copy of it.

@@ -26,10 +26,10 @@ class DateInjectionTest(unittest.TestCase):
         self.assertEqual(self.run_at("2026-01-15")[0:2], (0, ""))               # 54 days: silent
         code, out, _ = self.run_at("2026-03-01")                               # 9 days: warn
         self.assertEqual(code, 0)
-        self.assertIn("expires in 9 days", out)
-        code, _, err = self.run_at("2026-03-11")                               # expired
+        self.assertIn("AGENTS.md: warning: allowlist: entry for R1 expires in 9 days", out)
+        code, out, _ = self.run_at("2026-03-11")                               # expired
         self.assertEqual(code, 1)
-        self.assertIn("expired on 2026-03-10", err)
+        self.assertIn("AGENTS.md: error: allowlist: entry for R1 expired on 2026-03-10", out)
 
 
 if __name__ == "__main__":

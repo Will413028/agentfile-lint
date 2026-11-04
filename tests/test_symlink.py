@@ -52,11 +52,11 @@ class SymlinkAliasTest(unittest.TestCase):
     def test_agents_md_symlink_to_claude_md_checks_claude_md_as_the_real_file(self):
         _, lines = lint({"CLAUDE.md": LONG}, {"AGENTS.md": "CLAUDE.md"}, '[rules.C1]\nlevel = "error"\n')
         self.assertEqual(on("AGENTS.md", lines), [])
-        self.assertIn("CLAUDE.md:0: C1: CLAUDE.md must contain only the line '@AGENTS.md'", lines)
+        self.assertIn("CLAUDE.md: error: C1: CLAUDE.md must contain only the line '@AGENTS.md'", lines)
 
     def test_forbid_still_reports_a_symlinked_claude_md(self):
         _, lines = lint({"AGENTS.md": "ok\n"}, {"CLAUDE.md": "AGENTS.md"}, '[rules.C1]\nlevel = "error"\nmode = "forbid"\n')
-        self.assertEqual([x for x in lines if ": C1: " in x], ["CLAUDE.md:0: C1: CLAUDE.md must not exist (mode forbid); keep the instructions in AGENTS.md"])
+        self.assertEqual([x for x in lines if ": C1: " in x], ["CLAUDE.md: error: C1: CLAUDE.md must not exist (mode forbid); keep the instructions in AGENTS.md"])
 
     def test_symlink_to_a_file_outside_the_repo_is_checked_as_its_own_file(self):
         tmp = Path(tempfile.mkdtemp(prefix="il-outside-"))
@@ -74,7 +74,7 @@ class SymlinkAliasTest(unittest.TestCase):
         rc, lines = lint({"real.md": "ok\n"}, {"CLAUDE.md": "real.md", "AGENTS.md": "AGENTS.md"}, '[rules.C1]\nlevel = "error"\n')
         self.assertNotIn("Traceback (most recent call last):", lines)
         self.assertEqual(rc, 1)
-        self.assertIn("CLAUDE.md:0: C1: CLAUDE.md must contain only the line '@AGENTS.md'", lines)
+        self.assertIn("CLAUDE.md: error: C1: CLAUDE.md must contain only the line '@AGENTS.md'", lines)
 
     def test_link_name_in_other_case_is_never_checked_twice(self):
         # Case-insensitive file system: an alias of AGENTS.md. Case-sensitive: a dangling link, skipped.

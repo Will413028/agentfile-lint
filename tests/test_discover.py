@@ -47,7 +47,7 @@ class DiscoverTest(unittest.TestCase):
         root = helpers.make_repo({"AGENTS.md": "ok\n", "sub/AGENTS.md": BIG, "README.md": "r\n", **R1_LINE})
         r = helpers.run_new(root, "AGENTS.md")
         self.assertEqual(r.returncode, 1)
-        self.assertIn("sub/AGENTS.md:1: R1", r.stderr)
+        self.assertIn("sub/AGENTS.md:1: error: R1", r.stdout)
         # An irrelevant file name skips the run entirely.
         self.assertEqual(helpers.run_new(root, "README.md").returncode, 0)
 

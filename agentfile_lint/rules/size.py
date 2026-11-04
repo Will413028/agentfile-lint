@@ -76,11 +76,14 @@ def validate(params: dict[str, Any]) -> dict[str, Any]:
 
 
 def _block_patterns(params: dict[str, Any]) -> list[re.Pattern[str]]:
-    # Same shape as a hand-written `BEGIN.*?END\n?` with DOTALL: the block and one trailing newline.
+    # The block and one trailing line ending (LF, CRLF or a lone CR), matched non-greedily across lines.
     return [
-        re.compile(re.escape(b["begin"]) + ".*?" + re.escape(b["end"]) + "\n?", re.DOTALL)
+        re.compile(re.escape(b["begin"]) + ".*?" + re.escape(b["end"]) + "(?:\r\n|\r|\n)?", re.DOTALL)
         for b in params["excluded_blocks"]
     ]
+
+
+_LINE = re.compile(r"[^\r\n]*(?:\r\n|\r|\n)|[^\r\n]+$")  # one line on disk with its ending
 
 
 def limit_for(path: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -91,14 +94,32 @@ def limit_for(path: str, params: dict[str, Any]) -> dict[str, Any]:
     return {}
 
 
-def _body(text: str, params: dict[str, Any]) -> str:
-    for pattern in _block_patterns(params):
-        text = pattern.sub("", text)
-    return text
+def _block_spans(raw: str, params: dict[str, Any]) -> list[tuple[int, int]]:
+    """Character spans of the excluded blocks in the raw text, merged where they overlap."""
+    spans = sorted(m.span() for p in _block_patterns(params) for m in p.finditer(raw) if m.end() > m.start())
+    return _complement(_complement(spans, len(raw)), len(raw))
+
+
+def _complement(spans: list[tuple[int, int]], size: int) -> list[tuple[int, int]]:
+    kept, pos = [], 0
+    for start, end in sorted(spans):
+        if start > pos:
+            kept.append((pos, start))
+        pos = max(pos, end)
+    if pos < size:
+        kept.append((pos, size))
+    return kept
 
 
 def check_repo(ctx: Context, params: dict[str, Any]) -> list[Finding]:
     found: list[Finding] = []
+    for path in sorted(ctx.files):
+        # Bytes on disk without newline translation; the engine already found the file valid UTF-8.
+        try:
+            raw = (ctx.root / path).read_bytes().decode("utf-8")
+        except (OSError, UnicodeDecodeError):  # changed since the engine read it; the engine's read decides
+            continue
+        found.extend(_check_file(path, raw, params))
     for entry in params.get("path_limits", []):
         level = entry.get("level", "error")  # "error" = follow the rule level (the engine caps it)
         if level == "off":
@@ -123,10 +144,12 @@ def check_repo(ctx: Context, params: dict[str, Any]) -> list[Finding]:
     return found
 
 
-def check(path: str, text: str, params: dict[str, Any]) -> list[Finding]:
-    body = _body(text, params)
+def _check_file(path: str, raw: str, params: dict[str, Any]) -> list[Finding]:
+    """Single-file limits on the text as stored on disk (CRLF counts two bytes), minus excluded blocks."""
+    spans = _block_spans(raw, params)
+    body = "".join(raw[start:end] for start, end in _complement(spans, len(raw)))
     found: list[Finding] = []
-    size = len(body.encode("utf-8"))  # bytes after block removal
+    size = len(body.encode("utf-8"))  # raw bytes outside the blocks
     limit = limit_for(path, params)
     bytes_level = limit.get("bytes_level", "error")  # "error" = follow the rule level (the engine caps it)
     if "max_bytes" in limit and bytes_level != "off" and size > limit["max_bytes"]:
@@ -138,8 +161,19 @@ def check(path: str, text: str, params: dict[str, Any]) -> list[Finding]:
     max_chars = params.get("max_line_chars")
     if max_chars is None:
         return found
-    # Line numbers count on the body after block removal; length is in characters.
-    for number, line in enumerate(body.splitlines(), start=1):
-        if len(line) > max_chars:
-            found.append(Finding(path, number, ID, f"line is {len(line)} characters, limit {max_chars}"))
+    # Line numbers are the lines on disk (LF, CRLF or CR, as `grep -n` and annotations count them); only
+    # the characters outside the blocks count toward a line's length, so a line wholly inside a block is
+    # never reported. Lines and spans are both in order, so one moving index walks the spans.
+    i = 0
+    for number, m in enumerate(_LINE.finditer(raw), start=1):
+        start, end = m.start(), m.start() + len(m.group().rstrip("\r\n"))
+        while i < len(spans) and spans[i][1] <= start:
+            i += 1
+        length = end - start
+        for s_start, s_end in spans[i:]:
+            if s_start >= end:
+                break
+            length -= min(s_end, end) - max(s_start, start)
+        if length > max_chars:
+            found.append(Finding(path, number, ID, f"line is {length} characters, limit {max_chars}"))
     return found

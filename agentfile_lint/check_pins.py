@@ -28,6 +28,7 @@ from pathlib import Path
 from . import config as config_mod
 from . import discover
 from .errors import ConfigError
+from .finding import Finding
 
 SHA = re.compile(r"[0-9a-f]{40}")
 _REPO_LINE = re.compile(r"^\s*(?:-\s+)?repo:\s*(\S+)")
@@ -89,7 +90,7 @@ def evaluate(refs: list[Ref]) -> list[tuple[str, int, str]]:
 
 
 def main(argv: list[str]) -> int:
-    p = argparse.ArgumentParser(prog="agentfile-lint check-pins", description="Check that every reference to this tool pins the same full commit SHA.")
+    p = argparse.ArgumentParser(prog="agentfile-lint check-pins", description="(experimental) Check that every reference to this tool pins the same full commit SHA.")
     p.add_argument("--repo", help="string identifying this tool's repository in a reference (default: check_pins.repo from the config, else 'agentfile-lint')")
     p.add_argument("--config", help=f"config file (default: {config_mod.CONFIG_NAME} at the repo root, if present)")
     p.add_argument("--files", nargs="+", metavar="GLOB", help="files to scan, as globs relative to the repo root (default: check_pins.files)")
@@ -116,15 +117,16 @@ def main(argv: list[str]) -> int:
                 continue
             refs.extend(scan(path, text, repo))
     problems = evaluate(refs)
+    # Findings on stdout in the main command's text format; summaries on stderr (docs/adr/0004).
     for path, line, message in problems:
-        print(f"{path}:{line}: check-pins: {message}", file=sys.stderr)
+        print(Finding(path, line, "check-pins", message).format())
     if problems:
         return 1
     if not refs:
-        print(f"check-pins: no reference to {repo!r} found in {len(globs)} file pattern(s)")
         if args.require_refs:
-            print(f":0: check-pins: no reference to {repo!r} found", file=sys.stderr)
+            print(f"check-pins: error: no reference to {repo!r} found")
             return 1
+        print(f"check-pins: no reference to {repo!r} found in {len(globs)} file pattern(s)", file=sys.stderr)
         return 0
-    print(f"check-pins: {len(refs)} reference(s) to {repo!r}, all pinned to {refs[0].ref}")
+    print(f"check-pins: {len(refs)} reference(s) to {repo!r}, all pinned to {refs[0].ref}", file=sys.stderr)
     return 0

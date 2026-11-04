@@ -56,14 +56,14 @@ class ConfigTest(unittest.TestCase):
         root = helpers.make_repo({"AGENTS.md": "x\n" * 60, ".agentfile-lint.toml": LIMIT_100})
         r = helpers.run_new(root)
         self.assertEqual(r.returncode, 1)
-        self.assertIn("AGENTS.md:0: R1: file is 120 bytes, limit 100", r.stderr)
+        self.assertIn("AGENTS.md: error: R1: file is 120 bytes, limit 100", r.stdout)
 
     def test_levels_warn_and_off(self):
         files = {"AGENTS.md": "y" * 600 + "\n"}
         warn = helpers.make_repo({**files, ".agentfile-lint.toml": "[rules.R1]\nlevel = 'warn'\nmax_line_chars = 500\n"})
         r = helpers.run_new(warn)
         self.assertEqual((r.returncode, r.stderr), (0, ""))
-        self.assertIn("AGENTS.md:1: R1: line is 600 characters, limit 500", r.stdout)
+        self.assertIn("AGENTS.md:1: warning: R1: line is 600 characters, limit 500", r.stdout)
         off = helpers.make_repo({**files, ".agentfile-lint.toml": "[rules.R1]\nlevel = 'off'\nmax_line_chars = 500\n"})
         r = helpers.run_new(off)
         self.assertEqual((r.returncode, r.stdout, r.stderr), (0, "", ""))

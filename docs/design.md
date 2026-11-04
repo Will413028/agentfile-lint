@@ -3,8 +3,8 @@
 ## Problem
 
 Agent instruction files are loaded whole whenever an agent works in their directory, so they
-need budgets, and they rot: duplicated text, stale references, one-off exceptions that never
-expire. A review checklist does not hold. A deterministic check that runs in the same way
+need budgets, and they rot: duplicated text, stale references, one-off exceptions that nobody
+decided to keep. A review checklist does not hold. A deterministic check that runs in the same way
 locally and in CI does.
 
 ## Goals
@@ -12,8 +12,9 @@ locally and in CI does.
 - One rule file (TOML) plus a thin Python runner; no third-party dependencies at run time.
 - The local hook and CI run the same program, the same rules, the same version.
 - Three levels per rule: `error` (blocks), `warn` (prints), `off`.
-- Exceptions are time-boxed: every allowlist entry has a reason and an expiry date, and the
-  list can only shrink.
+- Debt exceptions are time-boxed: every allowlist entry has a reason and an expiry date, and the
+  list can only shrink. Permanent path scopes (`[[overrides]]`) live in the config with a required
+  reason and can only lower a level.
 - Reproducible: same input and same injected date give the same output. No network, no telemetry.
 
 ## Non-goals
@@ -29,12 +30,15 @@ locally and in CI does.
 
 ```
 preset (shipped) <- repo config (.agentfile-lint.toml, `extends`) -> effective config
-effective config + git ls-files (full set) -> rules -> findings -> allowlist -> output + exit code
+effective config + git ls-files (full set) -> rules -> findings -> overrides -> allowlist -> output + exit code
 ```
 
 - Rules are data: a rule module reads parameters, and repo-specific behaviour is never a
   branch in code. Differences between repositories are config values.
 - Merge: tables merge key by key (the child wins); every other value, lists included, is replaced.
+  The one exception is `[[overrides]]`: the lists concatenate, parents first, because replacing them
+  would silently drop the overrides of the config a file extends. A child therefore cannot undo an
+  inherited override, so the shipped presets carry none.
 - Unknown keys, unknown rule ids and malformed allowlist entries fail the configuration (exit 2).
   A typo must not silently disable a check.
 
@@ -78,18 +82,26 @@ expiry warnings appear without commits.
   stops adding files at 32 KiB in total (`project_doc_max_bytes`,
   https://learn.chatgpt.com/docs/agent-configuration/agents-md). `**/AGENTS.md` and `**/CLAUDE.md` over
   200 lines are a warning: Claude Code asks for fewer than 200 lines per CLAUDE.md file and reads
-  AGENTS.md when there is no CLAUDE.md (https://code.claude.com/docs/en/memory), but truncates nothing.
+  AGENTS.md when there is no CLAUDE.md (https://code.claude.com/docs/en/memory). It also cuts a file
+  it loads on demand (a subdirectory CLAUDE.md, CLAUDE.local.md, path-scoped rules) to its first 40,000
+  characters with a 200K context and warns about large files at startup; the default does not check
+  characters, so a CLAUDE.md under 200 lines with long or non-ASCII lines passes (docs/rules.md, R1).
   Every default error must point to such a hard limit (docs/adr/0003).
 - The old `max_bytes` tier table is rejected with a message that points to the migration note in the
   changelog.
 - Per-line limit in characters (`max_line_chars`), optional; omitted (the default), it is not checked.
   A merged config cannot remove a key, so once a parent config sets it, a child can only raise it.
 - `excluded_blocks`: marker pairs; the text from a begin marker through the end marker (and one
-  trailing newline) is removed before measuring.
-- Exact semantics: files are read as UTF-8 in text mode (CRLF becomes LF); bytes and lines are counted on
-  the body after block removal; line length is in characters; a limit is exceeded when
-  `measured > limit` (equal passes); line numbers count on the body after block removal.
-  These match the checker this rule replaces; a contract test compares both on boundary fixtures.
+  trailing LF, CRLF or CR) does not count toward any single-file check: `limits` bytes and lines, and
+  `max_line_chars` (a line wholly inside a block is never reported). It does not apply to `path_limits`.
+  The split is deliberate: a single-file limit is the author's budget, and a block a tool writes into
+  the file is not the author's; `path_limits` model what the agent actually reads, block included.
+- Exact semantics: files are read as UTF-8 without newline translation, so bytes are the bytes on disk
+  (a CRLF counts two) minus the blocks' raw bytes, the same unit `path_limits` uses; lines are counted
+  on the text outside the blocks; line length is in characters; a limit is exceeded when
+  `measured > limit` (equal passes); a finding's line number is the line on disk, where an annotation
+  points. A contract test compares R1 with the checker it replaced and lists the deliberate differences
+  (CRLF bytes, line numbers after a block; docs/adr/0004).
 
 ## Rules R2 to R6 and C1
 
@@ -138,6 +150,26 @@ Fenced code blocks and HTML comments are ignored by every text rule.
 A finding carries its own level and the rule level caps it: a rule at `warn` never produces an error,
 and a rule at `error` can still report some findings (R4 narrative words, R5 siblings, R6) as warnings.
 
+## Overrides
+
+Each entry: `paths` (globs), `rules` (rule id or alias -> `warn` or `off`), `reason` (docs/adr/0004).
+
+- An override changes levels only, never rule parameters, and only lowers: `error` fails the
+  configuration. For one file and one rule the lowest of the rule level and every matching override
+  applies, so entry order does not matter. `E0` and `allowlist` cannot be overridden.
+- It applies to the findings reported on the files it matches; those files stay in the input of
+  cross-file rules (`path_limits` still counts them, R5 still compares them), so a finding on a file
+  outside the paths is still reported.
+- Overrides run before the allowlist: an allowlist entry for a finding an override drops is no longer
+  needed.
+- Each glob of the config file the run loads directly (`.agentfile-lint.toml` or `--config`) must match
+  an analyzed instruction file; otherwise a warning (rule `allowlist`, whole file, on that config file:
+  repo-relative inside the repository, as given outside it, naming `overrides[i]` by its index in that
+  file). Entries reached through `extends` are not checked: a shared config serves repositories that do
+  not all have every path.
+- A same-directory alias (a `CLAUDE.md` symlink to `AGENTS.md`) is not analyzed, so an override names
+  the target file; a glob that matches only the alias gets the stale warning.
+
 ## Allowlist
 
 Each entry: `rule`, `path`, `reason`, `expires`.
@@ -156,22 +188,40 @@ weekly schedule so warnings appear before that happens.
 
 ## Output and exit codes
 
-`file:line: rule-id: message`, one finding per line, sorted by file, line, rule. Line `0` means
-the whole file and is printed as `:0` so the format has one shape. Errors go to stderr,
-warnings to stdout. Exit `0`: no errors; `1`: at least one error; `2`: usage or configuration
-problem. `--warn-as-error` promotes warnings. The format and exit codes are part of the
-contract; changing them is a major version change.
+Every finding goes to stdout, sorted by file, line, rule (docs/adr/0004).
+
+- Text (default): `file:line: severity: rule-id: message`, one finding per line. `severity` is
+  `error` or `warning` (configs say `warn`). A finding about the whole file drops the line field:
+  `file: severity: rule-id: message`. (GNU has `sourcefile:lineno: message`, and `program: message`
+  when no source file is relevant; it has no form for a whole file.)
+- `--format json`: one document `{"version": 1, "findings": [...]}`; each finding has `file`, `line`
+  (`null` for the whole file), `level` (`error` or `warning`), `rule` and `message`. `version` goes up
+  only when a field is removed or changes meaning, not when one is added.
+- `--format github`: one workflow command per finding, `::error` or `::warning` with `file`, `line`
+  (omitted for the whole file; GitHub has no whole-file annotation, and its API then reports
+  `start_line` 0) and `title` set to the rule id,
+  escaped like `escapeData` and `escapeProperty` in actions/toolkit `packages/core/src/command.ts`.
+  The message is the text-format line, so a finding past GitHub's annotation limits (10 errors and 10
+  warnings per step, 50 per job) keeps its location in the log. `action.yml` passes this format.
+
+The pseudo rule `E0` reports an instruction file that is not valid UTF-8; it is always on, and only an
+allowlist entry can exempt a file. Usage and configuration errors go to stderr (configuration
+errors as `agentfile-lint: message`; argparse prints its own usage message). Exit `0`: no errors; `1`: at least one error; `2`: usage or configuration
+problem. `--warn-as-error` promotes warnings. The formats and exit codes are part of the
+contract; which version part a change to them needs is in `docs/versioning.md`.
 
 ## Subcommands
 
-- `agentfile-lint check-pins`: every reference to this tool (pre-commit `rev:`, `uvx --from git+...@<sha>`,
-  `uses: owner/agentfile-lint@<sha>`) must be a full 40-hex SHA and all must be equal; output
-  `file:line: check-pins: message`, exit 1. Line scanning, no YAML parser; limits are listed in
-  `docs/versioning.md` and the module docstring.
+- `agentfile-lint check-pins` (experimental: outside the compatibility contract, mainly for someone
+  who maintains many repositories; docs/adr/0004): every reference to this tool (pre-commit `rev:`,
+  `uvx --from git+...@<sha>`, `uses: owner/agentfile-lint@<sha>`) must be a full 40-hex SHA and all
+  must be equal; findings on stdout as `file:line: error: check-pins: message` with exit 1, the summary
+  on stderr. Line scanning, no YAML parser;
+  limits are listed in `docs/versioning.md` and the module docstring.
 - `agentfile-lint config --format json`: the effective merged configuration (preset, extends,
   repo config, defaults filled in) as JSON with sorted keys, so another program (a test in a language
   without a TOML parser) can read the same values the linter uses. Exit 2 on an invalid config.
-- `agentfile-lint vendor`: see Vendored copy.
+- `agentfile-lint vendor`: see Vendored copy. It and the copy's `verify.py` are part of the contract.
 
 ## Judgment checks
 
@@ -220,6 +270,7 @@ diff of the pull request that upgrades the vendored copy.
 ## Versioning
 
 Semantic versions as git tags. New rules enter as `warn`; promoting a rule to `error` is a minor
-change with a changelog entry under `Graduated`; renaming or removing a rule id is a major change.
+change with a changelog entry under `Graduated`; renaming or removing a rule id is a major change
+from 1.0, and before 1.0 a minor one listed under `Changed (breaking)`.
 Consumers pin a full commit SHA with the version in a comment. The process (changelog rules, release,
 how consumers upgrade) is in `docs/versioning.md`.

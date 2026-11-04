@@ -24,6 +24,6 @@ runs:
         IL_CONFIG: ${{ inputs.config }}
         IL_ACTION_PATH: ${{ github.action_path }}
       run: |
-        args=()
+        args=(--format github)
         if [ -n "$IL_CONFIG" ]; then args+=(--config "$IL_CONFIG"); fi
         PYTHONPATH="$IL_ACTION_PATH" python -m agentfile_lint "${args[@]}"

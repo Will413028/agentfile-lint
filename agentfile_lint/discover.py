@@ -1,6 +1,7 @@
 """File discovery: tracked instruction files only, always the full set (never just argv)."""
 from __future__ import annotations
 
+import functools
 import os
 import posixpath
 import re
@@ -14,6 +15,7 @@ class DiscoverError(Exception):
     pass
 
 
+@functools.lru_cache(maxsize=None)
 def glob_to_regex(glob: str, capture: bool = False) -> re.Pattern[str]:
     """`**/` matches zero or more directories, `*` and `?` never cross `/`.
 

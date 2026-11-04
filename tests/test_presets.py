@@ -39,7 +39,7 @@ class PresetsTest(unittest.TestCase):
                                   ".agentfile-lint.toml": 'extends = ["preset:strict"]\n'})
         r = helpers.run_new(root)
         self.assertEqual(r.returncode, 1)  # the default R1 32 KiB error still applies
-        self.assertIn("AGENTS.md:0: R1: file is 33100 bytes, limit 32768", r.stderr)
+        self.assertIn("AGENTS.md: error: R1: file is 33100 bytes, limit 32768", r.stdout)
 
     def test_a_repo_config_overrides_strict(self):
         _, hit, lines = rules_hit('extends = ["preset:strict"]\n[rules.R4]\nlevel = "off"\n')

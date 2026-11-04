@@ -5,6 +5,63 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-04
+
+### Changed (breaking)
+
+- Text output: every finding is `file:line: severity: rule-id: message`, with `severity` `error` or
+  `warning`; a finding about a whole file is `file: severity: rule-id: message` (it used to print line
+  `:0`). All findings go to stdout; errors used to go to stderr. Usage and configuration errors (exit
+  2) stay on stderr, and exit codes do not change. A program that parses the text must accept both
+  line shapes; `--format json` is meant for programs (docs/adr/0004).
+- The pseudo rule `input` (an instruction file that is not valid UTF-8) is now `E0`. An allowlist entry
+  may name it; `[rules]` cannot turn it off. `--list-rules` lists it.
+- R1 single-file limits count the bytes on disk: a CRLF is two bytes (it was one), the unit
+  `path_limits` already used, so a Windows-line-ending file under a `limits` `max_bytes` may now
+  exceed it. `excluded_blocks` still drop out, with their raw bytes and a trailing LF, CRLF or CR. A long
+  line after an excluded block reports its line number on disk; it used to subtract the block's lines
+  (docs/adr/0004).
+- The GitHub Action runs with `--format github`, so findings appear as annotations; its inputs do not
+  change.
+
+### Added
+
+- `[[overrides]]`: permanent path scopes, each with `paths` (globs), `rules` (a rule id or alias mapped
+  to `warn` or `off`) and a required `reason`. An override only lowers a level; for one file and rule
+  the lowest applies. Under `extends` the lists concatenate (the one list that does not replace). A glob
+  in the directly loaded config that matches no instruction file is an `allowlist` warning. This is the
+  remedy for R5's translated and example copies short of turning R5 off (docs/adr/0004).
+- Rule aliases: a rule's name from `--list-rules` (`size` for R1) works wherever its id does, in
+  `[rules.<id>]`, an allowlist `rule` and override `rules` (`E0` and `allowlist` have no alias). Each config file is resolved before merging; one file naming
+  a rule by both fails (exit 2). Findings still print the id.
+- `--format json`: one document, `{"version": 1, "findings": [...]}`, each finding with `file`, `line`
+  (`null` for a whole file), `level` (`error` or `warning`), `rule` and `message`. `version` goes up
+  only when a field is removed or changes meaning.
+- `--format github`: GitHub workflow commands (`::error` / `::warning` with `file`, `line` and `title`),
+  escaped as `actions/toolkit` does; the message is the text-format line, so findings past GitHub's
+  annotation limits still show their location in the log.
+- `docs/field-report.md`: what 0.4.0, 0.5.0 and `preset:strict` report on 22 popular public
+  repositories with no config, and what the real problems looked like.
+- `docs/adr/0004-public-exceptions-output-ids.md`: the output format, permanent per-path exceptions,
+  rule aliases and byte measurement planned for 0.6.0, and an amendment to ADR 0001.
+
+### Changed
+
+- `check-pins` (experimental) prints its findings on stdout in the text format above
+  (`file:line: error: check-pins: message`) and its summary on stderr; with `--require-refs` and no
+  reference found it prints `check-pins: error: no reference to … found` on stdout (exit 1, as before).
+- `check-pins` is experimental: its output and options may change in any minor release. The README
+  and `check-pins --help` mark it "(experimental)"; the upgrade notes in `docs/versioning.md` call it
+  optional. `vendor` and `verify.py` stay part of the compatibility contract.
+- Versioning before 1.0: a change to the output format, a rule id or a config key is a minor version,
+  listed under `Changed (breaking)`; exit codes still change only in a major version
+  (`docs/versioning.md`).
+- Documentation: Claude Code does cut files it loads on demand (a subdirectory `CLAUDE.md`,
+  `CLAUDE.local.md`, path-scoped rules) at 40,000 characters with a 200K context; 0.5.0's design notes,
+  `docs/rules.md` and preset comment said it truncates nothing. R1 does not check characters;
+  `docs/rules.md` states the blind spot and a byte limit that approximates it (docs/adr/0003,
+  Amendment).
+
 ## [0.5.0] - 2026-11-03
 
 ### Changed (breaking)

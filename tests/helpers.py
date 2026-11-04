@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -37,6 +38,20 @@ def run_new(root: Path, *args: str) -> subprocess.CompletedProcess:
         [sys.executable, "-m", "agentfile_lint", *args],
         cwd=root, env=env, capture_output=True, text=True,
     )
+
+
+FINDING_LINE = re.compile(r"^[^:]+(?::\d+)?: (error|warning): [^:\s]+: ")
+
+
+def by_severity(r: subprocess.CompletedProcess) -> tuple[list[str], list[str]]:
+    """The text-format findings on stdout as (warning lines, error lines). Every stdout line must be
+    a finding, and findings never go to stderr (it is for usage and config problems only)."""
+    warnings, errors = [], []
+    for line in r.stdout.splitlines():
+        m = FINDING_LINE.match(line)
+        assert m, f"stdout line is not a text-format finding: {line!r}"
+        (errors if m.group(1) == "error" else warnings).append(line)
+    return warnings, errors
 
 
 def run_legacy(root: Path) -> subprocess.CompletedProcess:

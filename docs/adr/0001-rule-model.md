@@ -1,6 +1,7 @@
 # ADR 0001: Rule model
 
-Status: accepted
+Status: accepted. Decision 3 and the rejected inline-comment alternative are amended by ADR 0004
+(see Amendment below).
 
 ## Context
 
@@ -40,3 +41,15 @@ the program full of per-repository branches.
   warning window and a scheduled CI run exist to soften that.
 - Changing a default limit in the preset changes every consumer that did not override it, so
   such changes need a version bump and a changelog entry.
+
+## Amendment (ADR 0004, 0.6.0)
+
+This decision assumed one owner who treats every exception as debt. Once the tool was public, users
+also had permanent exceptions (translated or example copies), so:
+
+- Decision 3: the allowlist stays for time-boxed debt; permanent per-path rule levels go in
+  `[[overrides]]`, each with a required reason (ADR 0004, decision 3).
+- Rejected inline comments: still rejected, but the reason above is half wrong. Whether a comment is
+  still needed can be checked (ruff RUF100, ESLint `reportUnusedDisableDirectives`); the remaining
+  reasons are that a comment has no expiry date and that comments scatter exceptions over the
+  instruction files instead of one place to audit (ADR 0004, decision 6).
