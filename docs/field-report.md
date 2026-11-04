@@ -4,10 +4,10 @@ What `agentfile-lint` reports on popular public repositories when nobody configu
 changed from 0.4.0 to 0.5.0, and what the findings that were real looked like. Measured 2026-11-03 with
 the releases from PyPI. Per-rule reasons and false-positive rates are in `docs/rules.md`.
 
-0.6.0 was not rerun on the sample. It changes the output format and how single-file `limits` count
-bytes (CRLF as two bytes); the default preset has no single-file byte limit, and `path_limits` already
-counted bytes on disk, so the no-config numbers below are expected to hold for 0.6.0 (inferred from the
-changes, not measured).
+0.6.0 was rerun on the same 22 commits on 2026-11-04 (`--format json`, with no config and with
+`preset:strict`): every finding (file, line, rule, level) and every exit code is identical to 0.5.0,
+so the numbers below hold for 0.6.0 too. 0.5.0 was rerun alongside it and reproduced the 2026-11-03
+totals exactly.
 
 ## Summary
 
