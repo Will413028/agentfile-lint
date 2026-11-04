@@ -5,6 +5,28 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed (breaking)
+
+- One rule id is one check with one level (docs/adr/0005). R1 is split into `R1a` per-file bytes
+  (`file-bytes`), `R1b` per-file lines (`file-lines`), `R1c` combined bytes on a path (`path-bytes`)
+  and `R1d` line length (`line-length`); R4 into `R4a` dates and issue numbers (`dated-refs`) and
+  `R4b` narrative words (`narrative-words`); R5 into `R5a` ancestor duplicates
+  (`ancestor-duplicates`) and `R5b` sibling duplicates (`sibling-duplicates`). Findings keep their
+  file, line and severity under the default and strict presets; only the id changes.
+- The ids and aliases `R1`/`size`, `R4`/`rot` and `R5`/`duplicates` are a configuration error (exit
+  2) in `[rules]`, allowlist entries and overrides; the message lists the new ids. They are not aliases
+  for the group.
+- Removed keys: `bytes_level`, `lines_level`, `path_limits` (now `R1c.limits`), `max_line_chars` (now
+  `R1d.max_chars`), `narrative_level` and `sibling_level`; each fails with a message naming its
+  replacement. Per-file limits move to `R1a.limits` (`{glob, max_bytes}`) and `R1b.limits`
+  (`{glob, max_lines}`).
+- New top-level table `shared` for parameters several ids use: `[shared.size]` (`excluded_blocks`)
+  and `[shared.duplicates]` (`ancestor_pairs`, `min_chars`, `ignore_headings`, `ignore_patterns`).
+- Allowlist entries require `count`, the number of findings of that rule in that file they accept.
+  More findings than `count`: none is suppressed and the entry reports an error; fewer: the entry
+  reports an error asking to lower `count`. In 0.6.0 one entry hid every finding of its rule in the
+  file, including an R1 path error behind a line-count exception.
+
 ## [0.6.0] - 2026-11-04
 
 ### Changed (breaking)

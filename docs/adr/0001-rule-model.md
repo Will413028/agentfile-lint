@@ -1,7 +1,7 @@
 # ADR 0001: Rule model
 
 Status: accepted. Decision 3 and the rejected inline-comment alternative are amended by ADR 0004
-(see Amendment below).
+(see Amendment below); ADR 0005 adds a required `count` to allowlist entries.
 
 ## Context
 
