@@ -1,6 +1,6 @@
 # ADR 0003: The default preset runs only objective checks
 
-Status: accepted. Supersedes the default values in decision 1 of ADR 0002 and its rejection of a
+Status: accepted; the Claude Code constraint is corrected by the Amendment below. Supersedes the default values in decision 1 of ADR 0002 and its rejection of a
 combined 32 KiB limit; the `limits` model of ADR 0002 stands.
 
 ## Context
@@ -17,7 +17,8 @@ Constraints:
 
 - External: Codex reads at most 32 KiB of project docs (`project_doc_max_bytes`, a hard limit;
   https://learn.chatgpt.com/docs/agent-configuration/agents-md). Claude Code asks for fewer than 200
-  lines per CLAUDE.md, reads AGENTS.md when no CLAUDE.md exists, and truncates nothing
+  lines per CLAUDE.md, reads AGENTS.md when no CLAUDE.md exists, and truncates nothing (wrong for
+  files loaded on demand; see Amendment)
   (https://code.claude.com/docs/en/memory). A version number uploaded to PyPI cannot be reused.
   Existing users pin a SHA or a vendored copy, so a new default reaches them only when they upgrade.
 - Inherited: "new rules enter at `warn`" (docs/versioning.md) still holds; it governs raising a rule,
@@ -85,3 +86,21 @@ Revisit when:
 - Users report R5 same-name findings on deliberate copies (translations, examples): add path
   exclusions or turn it off by default.
 - Codex documents that it does not drop content past 32 KiB: lower that limit to `warn`.
+
+## Amendment (0.6.0): Claude Code's character limit
+
+The constraint "Claude Code truncates nothing" is wrong. Claude Code's memory documentation
+(https://code.claude.com/docs/en/memory, read 2026-11-03) says a file it loads on demand (a
+subdirectory CLAUDE.md, CLAUDE.local.md and its `@path` imports, path-scoped rules) is cut to its first
+40,000 characters with a 200K context and more with a 1M context, with a note telling Claude to read
+the rest; large files also get a warning at startup, at a size the documentation does not state.
+
+0.6.0 does not add a character check; it corrects the documentation and states the blind spot in
+docs/rules.md (R1). Reasons: on the 22-repository sample no CLAUDE.md is over 40,000 bytes (so none is
+over 40,000 characters), and every file over 40,000 characters is a subdirectory AGENTS.md the 32 KiB
+path limit already reports, so the check would find nothing new; and a character check needs a counting
+contract (code points or UTF-16 units, HTML comments and frontmatter, CRLF, `excluded_blocks`) that
+would follow Claude Code's versions. A new warn-level check can be added later in a minor release.
+
+Revisit when an issue asks for a character limit, or a CLAUDE.md over the limit that the default misses
+is reported; `.claude/rules/` and CLAUDE.local.md as file types go with it.

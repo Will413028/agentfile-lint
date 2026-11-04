@@ -44,19 +44,42 @@ at most 30% (docs/adr/0003). The rates below come from that measurement (2026-11
 
 ## R1 size
 
-Why: agents load these files whole, every session. Codex reads `AGENTS.md` from the repository root
+Why: agents read these files every session, and some stop reading past a limit. Codex reads `AGENTS.md` from the repository root
 down to the working directory and stops adding files once their combined size reaches
 `project_doc_max_bytes`, 32 KiB by default; text past that is silently not read
 ([Codex: AGENTS.md](https://learn.chatgpt.com/docs/agent-configuration/agents-md)). Claude Code asks for
 fewer than 200 lines per `CLAUDE.md`, because longer files use more context and reduce adherence, and
 reads `AGENTS.md` when there is no `CLAUDE.md`
-([Claude Code: memory](https://code.claude.com/docs/en/memory)).
+([Claude Code: memory](https://code.claude.com/docs/en/memory)). Claude Code also cuts a file it loads
+on demand (a subdirectory `CLAUDE.md`, `CLAUDE.local.md`, path-scoped rules) to its first 40,000
+characters with a 200K context (more with a 1M context), adds a note telling it to read the rest, and
+warns at startup about large files.
 
 Default: `AGENTS.md` files on one path that total over 32768 bytes are an error (`path_limits`, reported
 on the file where the total first exceeds the limit); `AGENTS.md` and `CLAUDE.md` over 200 lines are a
 warning. Both are limits an agent's documentation states; the first one drops text, the second is
 guidance. Per-line character limits and other byte limits are yours to add (`limits`,
 `max_line_chars`).
+
+Blind spot: the default counts no characters. A `CLAUDE.md` under 200 lines with long or non-ASCII
+lines passes even when Claude Code would cut it, and the 32 KiB path limit covers only `AGENTS.md`. To
+approximate Claude Code's limit, add a byte limit; bytes are never fewer than characters, so it misses
+no file over 40,000 characters, but it reports text in a three-byte script (Chinese, Japanese) from
+about 13,300 characters. A `limits` list replaces the default one, so repeat its entries:
+
+```toml
+[[rules.R1.limits]]
+glob = "**/AGENTS.md"
+max_lines = 200
+lines_level = "warn"
+
+[[rules.R1.limits]]
+glob = "**/CLAUDE.md"
+max_lines = 200
+lines_level = "warn"
+max_bytes = 40000
+bytes_level = "warn"
+```
 
 Measured: objective, so no false-positive rate. With no config, 22 public repositories gave 16 errors
 in 6 repositories (all combined sizes over 32 KiB; 2 single files were over on their own) and 20

@@ -82,7 +82,10 @@ expiry warnings appear without commits.
   stops adding files at 32 KiB in total (`project_doc_max_bytes`,
   https://learn.chatgpt.com/docs/agent-configuration/agents-md). `**/AGENTS.md` and `**/CLAUDE.md` over
   200 lines are a warning: Claude Code asks for fewer than 200 lines per CLAUDE.md file and reads
-  AGENTS.md when there is no CLAUDE.md (https://code.claude.com/docs/en/memory), but truncates nothing.
+  AGENTS.md when there is no CLAUDE.md (https://code.claude.com/docs/en/memory). It also cuts a file
+  it loads on demand (a subdirectory CLAUDE.md, CLAUDE.local.md, path-scoped rules) to its first 40,000
+  characters with a 200K context and warns about large files at startup; the default does not check
+  characters, so a CLAUDE.md under 200 lines with long or non-ASCII lines passes (docs/rules.md, R1).
   Every default error must point to such a hard limit (docs/adr/0003).
 - The old `max_bytes` tier table is rejected with a message that points to the migration note in the
   changelog.

@@ -54,6 +54,11 @@ versions follow [Semantic Versioning](https://semver.org/).
 - Versioning before 1.0: a change to the output format, a rule id or a config key is a minor version,
   listed under `Changed (breaking)`; exit codes still change only in a major version
   (`docs/versioning.md`).
+- Documentation: Claude Code does cut files it loads on demand (a subdirectory `CLAUDE.md`,
+  `CLAUDE.local.md`, path-scoped rules) at 40,000 characters with a 200K context; 0.5.0's design notes,
+  `docs/rules.md` and preset comment said it truncates nothing. R1 does not check characters;
+  `docs/rules.md` states the blind spot and a byte limit that approximates it (docs/adr/0003,
+  Amendment).
 
 ## [0.5.0] - 2026-11-03
 

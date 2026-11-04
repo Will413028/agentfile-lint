@@ -33,7 +33,8 @@ max_bytes = 32768
 # per-file limit. Either or both of max_bytes and max_lines may be set; `bytes_level` / `lines_level`
 # set each one's level (omitted: the rule level; never above it). Claude Code asks for fewer than 200
 # lines per CLAUDE.md file (https://code.claude.com/docs/en/memory) and reads AGENTS.md when no
-# CLAUDE.md exists; guidance that truncates nothing, so a warning.
+# CLAUDE.md exists; guidance, not a point where text is dropped, so a warning. Claude Code's per-file
+# character limit is not checked here (docs/rules.md, R1).
 # A repository config that sets `limits` or `path_limits` replaces that whole list.
 [[rules.R1.limits]]
 glob = "**/AGENTS.md"
