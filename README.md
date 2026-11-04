@@ -10,10 +10,6 @@ and `CLAUDE.md` today; `SKILL.md`, hooks and MCP config are next if it proves us
 uvx agentfile-lint        # in any git repository; no config needed
 ```
 
-Status: PyPI has 0.5.0, which prints the older output format (no severity in the line, errors on
-stderr). The output below is from `dev` (changes listed in the CHANGELOG under Unreleased); until the
-next release, run it with `uvx --from git+https://github.com/Will413028/agentfile-lint@dev agentfile-lint`.
-
 With no config it runs only checks whose findings are facts. From a demo repository:
 
 ```text

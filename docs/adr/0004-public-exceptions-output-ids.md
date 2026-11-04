@@ -136,7 +136,7 @@ Constraints:
 5. R1 sizes and positions. R1 reads bytes on disk, for `limits` and `path_limits` alike.
    `excluded_blocks` applies to the per-file checks (the bytes and lines of `limits`, and
    `max_line_chars`) and not to `path_limits`; it subtracts the bytes of each block on disk,
-   including its line ending (`\n` or `\r\n`). A per-file limit is the author's budget, and a block
+   including its line ending (`\n`, `\r\n` or `\r`). A per-file limit is the author's budget, and a block
    that a tool writes into the file is not the author's text, while `path_limits` model what the agent
    reads, blocks included. Lines inside a block are neither counted nor checked for length, but every
    R1 finding reports its line number in the file on disk, since that number is what an editor or a

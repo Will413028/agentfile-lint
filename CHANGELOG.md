@@ -5,6 +5,8 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-04
+
 ### Changed (breaking)
 
 - Text output: every finding is `file:line: severity: rule-id: message`, with `severity` `error` or
@@ -16,7 +18,7 @@ versions follow [Semantic Versioning](https://semver.org/).
   may name it; `[rules]` cannot turn it off. `--list-rules` lists it.
 - R1 single-file limits count the bytes on disk: a CRLF is two bytes (it was one), the unit
   `path_limits` already used, so a Windows-line-ending file under a `limits` `max_bytes` may now
-  exceed it. `excluded_blocks` still drop out, with their raw bytes and a trailing LF or CRLF. A long
+  exceed it. `excluded_blocks` still drop out, with their raw bytes and a trailing LF, CRLF or CR. A long
   line after an excluded block reports its line number on disk; it used to subtract the block's lines
   (docs/adr/0004).
 - The GitHub Action runs with `--format github`, so findings appear as annotations; its inputs do not

@@ -92,7 +92,7 @@ expiry warnings appear without commits.
 - Per-line limit in characters (`max_line_chars`), optional; omitted (the default), it is not checked.
   A merged config cannot remove a key, so once a parent config sets it, a child can only raise it.
 - `excluded_blocks`: marker pairs; the text from a begin marker through the end marker (and one
-  trailing LF or CRLF) does not count toward any single-file check: `limits` bytes and lines, and
+  trailing LF, CRLF or CR) does not count toward any single-file check: `limits` bytes and lines, and
   `max_line_chars` (a line wholly inside a block is never reported). It does not apply to `path_limits`.
   The split is deliberate: a single-file limit is the author's budget, and a block a tool writes into
   the file is not the author's; `path_limits` model what the agent actually reads, block included.
