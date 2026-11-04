@@ -196,7 +196,7 @@ class DefaultLimitsTest(unittest.TestCase):
     def test_an_r1b_exception_does_not_hide_the_r1c_error(self):
         # The 0.6.0 defect behind docs/adr/0005: one allowlist entry for the 200-line warning also hid
         # the 32 KiB error on the same file, and the run exited 0.
-        toml = ('[[allowlist.entries]]\nrule = "R1b"\npath = "AGENTS.md"\nreason = "split in progress"\n'
+        toml = ('[[allowlist.entries]]\nrule = "R1b"\npath = "AGENTS.md"\ncount = 1\nreason = "split in progress"\n'
                 "expires = 2026-07-01\n")
         root = helpers.make_repo({"AGENTS.md": ("x" * 99 + "\n") * 400, CFG: toml})
         r = helpers.run_new(root, "--today", "2026-06-01")

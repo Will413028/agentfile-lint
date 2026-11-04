@@ -60,7 +60,7 @@ class ScopeTest(unittest.TestCase):
             self.assertFalse([line for line in r5(warnings + errors) if line.startswith("docs/")], (toml, r.stdout))
 
     def test_allowlist_entry_on_an_overridden_path_is_no_longer_needed(self):
-        entry = ('[[allowlist.entries]]\nrule = "R5b"\npath = "docs/zh/AGENTS.md"\nreason = "r"\n'
+        entry = ('[[allowlist.entries]]\nrule = "R5b"\npath = "docs/zh/AGENTS.md"\ncount = 1\nreason = "r"\n'
                  'expires = 2026-07-01\n')
         r = run({**TRANSLATED, ".agentfile-lint.toml": STRICT + OFF_DOCS.format(rules='R5b = "off"') + entry})
         self.assertIn("docs/zh/AGENTS.md: error: allowlist: entry for R5b is no longer needed", r.stdout)

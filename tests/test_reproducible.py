@@ -4,7 +4,7 @@ import helpers
 
 TOML = (
     '[rules.R1d]\nlevel = "error"\nmax_chars = 500\n'
-    '[[allowlist.entries]]\nrule = "R1d"\npath = "AGENTS.md"\nreason = "temporary"\nexpires = 2026-03-10\n'
+    '[[allowlist.entries]]\nrule = "R1d"\npath = "AGENTS.md"\ncount = 1\nreason = "temporary"\nexpires = 2026-03-10\n'
 )
 
 

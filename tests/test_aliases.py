@@ -12,7 +12,7 @@ def config_json(toml, *files):
     return helpers.run_new(root, "config", "--today", "2026-06-01")
 
 
-ENTRY = "[[allowlist.entries]]\nrule = '{rule}'\npath = 'AGENTS.md'\nreason = 'r'\nexpires = 2026-07-01\n"
+ENTRY = "[[allowlist.entries]]\nrule = '{rule}'\npath = 'AGENTS.md'\ncount = 1\nreason = 'r'\nexpires = 2026-07-01\n"
 
 
 class AliasTest(unittest.TestCase):
@@ -61,7 +61,7 @@ class AliasTest(unittest.TestCase):
         self.assertIn("rules.file-bytes and rules.R1a", r.stderr)
 
     def test_non_string_allowlist_rule_is_a_config_error(self):
-        r = config_json("[[allowlist.entries]]\nrule = ['file-bytes']\npath = 'AGENTS.md'\nreason = 'r'\nexpires = 2026-07-01\n")
+        r = config_json("[[allowlist.entries]]\nrule = ['file-bytes']\npath = 'AGENTS.md'\ncount = 1\nreason = 'r'\nexpires = 2026-07-01\n")
         self.assertEqual(r.returncode, 2)
         self.assertNotIn("Traceback", r.stderr)
 

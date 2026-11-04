@@ -56,7 +56,7 @@ services/api/AGENTS.md:5: warning: R6: possible copied constant '`MAX_RETRIES = 
 | `R5b` | off | warn | identical lines in sibling files |
 | `R6` | off | warn | candidates for constants copied from code (heuristic, always a warning) |
 | `C1` | off | warn | `CLAUDE.md` is only the line `@AGENTS.md` (`import-only`) or absent (`forbid`) |
-| `allowlist` | error | error | exceptions: expired or no-longer-needed allowlist entries fail, entries warn before they expire; an override glob that matches no file warns |
+| `allowlist` | error | error | exceptions: expired, no-longer-needed or miscounted (`count` above or below the findings) allowlist entries fail, entries warn before they expire; an override glob that matches no file warns |
 
 Every rule except `R1a` and `R1c` ships at `warn` or `off`; raise a rule to `error` in your own config once it is
 clean. Why each rule exists, where its default comes from and its measured false-positive rate:
@@ -165,6 +165,7 @@ max_days = 90
 [[allowlist.entries]]
 rule = "R1a"
 path = "docs/AGENTS.md"
+count = 1  # findings of R1a in that file; more or fewer fail
 reason = "split planned in the tracker"
 expires = 2026-12-31
 

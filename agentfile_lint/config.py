@@ -69,7 +69,7 @@ def to_jsonable(cfg: "Config") -> dict[str, Any]:
             "max_entries": cfg.allowlist.max_entries,
             "warn_days": cfg.allowlist.warn_days,
             "entries": [
-                {"rule": e.rule, "path": e.path, "reason": e.reason, "expires": e.expires.isoformat()}
+                {"rule": e.rule, "path": e.path, "count": e.count, "reason": e.reason, "expires": e.expires.isoformat()}
                 for e in cfg.entries
             ],
         },

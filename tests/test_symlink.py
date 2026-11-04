@@ -82,7 +82,7 @@ class SymlinkAliasTest(unittest.TestCase):
         self.assertEqual((rc, on("CLAUDE.md", lines)), (0, []))
 
     def test_allowlist_entry_for_an_alias_is_no_longer_needed(self):
-        entry = '[[allowlist.entries]]\nrule = "R1b"\npath = "CLAUDE.md"\nreason = "split later"\nexpires = 2026-06-30\n'
+        entry = '[[allowlist.entries]]\nrule = "R1b"\npath = "CLAUDE.md"\ncount = 1\nreason = "split later"\nexpires = 2026-06-30\n'
         rc, lines = lint({"AGENTS.md": LONG}, {"CLAUDE.md": "AGENTS.md"}, entry)
         self.assertEqual(rc, 1)
         self.assertIn("is no longer needed (file is not an analyzed instruction file)", "\n".join(on("CLAUDE.md", lines)))

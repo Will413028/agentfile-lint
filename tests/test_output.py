@@ -132,7 +132,7 @@ class InputRuleTest(unittest.TestCase):
     BAD = {"AGENTS.md": b"ok\n\xff\xfe\n"}
 
     def entry(self, rule):
-        return f'[[allowlist.entries]]\nrule = "{rule}"\npath = "AGENTS.md"\nreason = "binary for now"\nexpires = 2026-06-30\n'
+        return f'[[allowlist.entries]]\nrule = "{rule}"\npath = "AGENTS.md"\ncount = 1\nreason = "binary for now"\nexpires = 2026-06-30\n'
 
     def test_reported_as_e0(self):
         r = run(self.BAD)

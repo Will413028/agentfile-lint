@@ -118,7 +118,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.list_rules:
         for rule_id in RULES:
             print(f"{rule_id}  {cfg.rules[rule_id]['level']:<5}  {NAMES[rule_id]}: {DESCRIPTIONS[rule_id]}")
-        print("allowlist  error  expired or no-longer-needed allowlist entries; warns before expiry and on an override glob that matches no file (always on)")
+        print("allowlist  error  expired, no-longer-needed or miscounted allowlist entries; warns before expiry and on an override glob that matches no file (always on)")
         print(f"{INPUT_RULE}  error  instruction file is not valid UTF-8; only an allowlist entry can exempt it (always on)")
         return 0
 
