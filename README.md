@@ -104,11 +104,13 @@ and verified, and the output and exit codes are a tested contract.
 
 ```sh
 python3 -m agentfile_lint            # from a git repository; analyzes tracked files only
+agentfile-lint --no-git              # walk the current directory instead (no git needed)
 agentfile-lint --list-rules          # rules and their effective levels
 agentfile-lint --today 2026-01-31    # replace the current date (reproducible runs)
 agentfile-lint --config path.toml    # explicit config instead of .agentfile-lint.toml
 agentfile-lint --warn-as-error
-agentfile-lint --format json         # or github (workflow commands); default text
+agentfile-lint --format json         # or github (workflow commands) or sarif; default text
+agentfile-lint --path-prefix sub     # prepend a directory to every reported path
 ```
 
 Other commands:
@@ -126,12 +128,14 @@ Findings go to stdout, one line each: `file:line: severity: rule-id: message`, w
 `error` or `warning`; a finding about a whole file has no line: `file: severity: rule-id: message`.
 `--format json` prints one document, `{"version": 1, "findings": [...]}`, each finding with `file`,
 `line` (`null` for a whole file), `level`, `rule` and `message`; `--format github` prints GitHub
-workflow commands. Usage and configuration problems go to stderr. Exit codes: `0` no errors, `1` at
+workflow commands; `--format sarif` prints one SARIF 2.1.0 log for code scanning. Usage and configuration problems go to stderr. Exit codes: `0` no errors, `1` at
 least one error, `2` usage or configuration problem.
 
 Files given on the command line are ignored; the full tracked set is always analyzed
 (cross-file checks and allowlist checks need it). Untracked local instruction
-files (`*.local.md`) are never analyzed.
+files (`*.local.md`) are never analyzed. `--no-git` analyzes every file under the current directory
+instead, with the same globs; it skips `.git`, `node_modules`, virtual environments and tool caches by
+a fixed list and does not read `.gitignore`.
 
 ## Configuration
 
@@ -240,6 +244,28 @@ on:
 
 The action runs with `--format github`, so findings appear as annotations on the pull request. GitHub
 shows at most 10 errors and 10 warnings per step; the others stay in the log with their file and line.
+When the repository is checked out to a subdirectory, set `working-directory: <dir>`; `config` is then
+relative to it, and annotations still point at the right file.
+
+Code scanning: the action does not upload anything. To see findings as code scanning alerts, write
+SARIF and upload it yourself (the upload needs `security-events: write`):
+
+```yaml
+permissions:
+  contents: read
+  security-events: write
+# steps:
+- uses: actions/checkout@<sha>
+- uses: actions/setup-python@<sha>
+  with:
+    python-version: "3.12"
+- run: python -m pip install agentfile-lint==<version>
+- run: agentfile-lint --format sarif > agentfile-lint.sarif || [ $? -eq 1 ]   # findings still upload
+- uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+  with:
+    sarif_file: agentfile-lint.sarif
+    category: agentfile-lint
+```
 
 `R2` and `R3c` need configuration to check anything (section lists, spec mappings); the preset
 documents every key. A rule at `error` can still emit some findings as warnings.

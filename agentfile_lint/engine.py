@@ -12,6 +12,14 @@ from .finding import INPUT_RULE, Finding
 from .rules import MODULES
 
 
+# Rules with no module and no `[rules]` level, always on: id -> description (`--list-rules`, SARIF).
+PSEUDO_RULES = {
+    allowlist.RULE_ID: "expired, no-longer-needed or miscounted allowlist entries; warns before expiry and on an override glob that matches no file (always on)",
+    disable.RULE_ID: "malformed per-line directives; warns on a directive that suppresses nothing (always on)",
+    INPUT_RULE: "instruction file is not valid UTF-8; only an allowlist entry can exempt it (always on)",
+}
+
+
 def _level(rule_level: str, finding: Finding) -> str:
     """The level caps a finding: at `warn` it is never an error; `off` drops it. R6 emits warnings only."""
     if rule_level == "off":
@@ -19,8 +27,11 @@ def _level(rule_level: str, finding: Finding) -> str:
     return "warn" if rule_level == "warn" or finding.level == "warn" else "error"
 
 
-def analyze(root: Path, config: Config, today: datetime.date, warn_as_error: bool = False) -> list[Finding]:
-    paths = discover.instruction_files(root, config.all_globs)
+def analyze(
+    root: Path, config: Config, today: datetime.date, warn_as_error: bool = False, use_git: bool = True,
+) -> list[Finding]:
+    files = discover.list_files(root, use_git)
+    paths = discover.instruction_files(root, config.all_globs, files)
     alias = discover.aliases(root, paths)
     paths = [p for p in paths if p not in alias]
     findings: list[Finding] = []
@@ -30,7 +41,7 @@ def analyze(root: Path, config: Config, today: datetime.date, warn_as_error: boo
             raw[path] = (root / path).read_bytes().decode("utf-8")  # read once, as stored (docs/design.md, R1a to R1d)
         except UnicodeDecodeError:
             findings.append(Finding(path, 0, INPUT_RULE, "file is not valid UTF-8"))
-    ctx = Context(root, discover.tracked_files(root), raw)
+    ctx = Context(root, files, raw)
     for module in MODULES:
         base = {rule_id: config.rules[rule_id]["level"] for rule_id, _, _ in module.CHECKS}
         # A rule runs at the highest level a `raise` override can give it, so it has findings to raise.

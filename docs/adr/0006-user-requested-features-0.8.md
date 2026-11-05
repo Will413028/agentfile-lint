@@ -72,3 +72,37 @@ Consequences:
 - The audit trail for one-line exceptions is the files themselves; there is no expiry.
 - A comment line in `CLAUDE.md` costs nothing for Claude Code, which strips block-level HTML comments,
   but other agents may read it.
+
+## SARIF output without a built-in upload
+
+`--format sarif` prints SARIF 2.1.0, the version GitHub code scanning reads. The action does not
+upload it: an upload input would make `github/codeql-action` a dependency of every action user and
+need `security-events: write` on every workflow that runs the action. The README shows the upload as
+two extra steps. Rejected: an upload input on the action (the dependency and permission above); SARIF
+with no upload test and no README example (nothing would show that code scanning reads the file).
+
+Consequences:
+
+- Code scanning users run the CLI for SARIF and the action (or the CLI) for annotations.
+- The rule descriptors come from the rule table, so a new rule appears in SARIF with no change here.
+
+The action's `working-directory` input goes with it: findings are relative to the git root, so a
+repository checked out below the workspace needs its paths prefixed for annotations (and SARIF) to
+land on the file. `--path-prefix` does the joining; the action computes the prefix as the path from the
+workspace to the git root, so pointing `working-directory` at a subdirectory of the same repository
+adds no prefix.
+
+## Scanning outside git
+
+`--no-git` walks the current directory with the same globs, never entering a fixed list of
+version-control and dependency directories, and does not read `.gitignore`; git-tracked files stay the
+default. Rejected: parsing `.gitignore` (nested files and negation are a reimplementation of git the
+standard library does not offer); switching automatically outside a repository (the same command
+would scan a different set depending on where it runs, and a misconfigured CI job would pass instead
+of failing).
+
+Consequences:
+
+- Generated or ignored instruction files under the walked directory are analyzed; the fixed list is
+  the only exclusion.
+- Rules that look at the tracked set see every walked file.

@@ -30,7 +30,7 @@ locally and in CI does.
 
 ```
 preset (shipped) <- repo config (.agentfile-lint.toml, `extends`) -> effective config
-effective config + git ls-files (full set) -> rules -> findings -> overrides -> per-line directives -> allowlist -> output + exit code
+effective config + git ls-files or the --no-git walk (full set) -> rules -> findings -> overrides -> per-line directives -> allowlist -> output + exit code
 ```
 
 - Rules are data: a rule module reads parameters, and repo-specific behaviour is never a
@@ -59,6 +59,13 @@ same text twice. The same file in another
 directory is a separate load location and is analyzed on its own; when it sits in an ancestor or
 descendant directory, an agent working there loads both, and R5a reports the repeated lines. A
 symlink to a file outside the discovered set is analyzed as its own file; a dangling one is skipped.
+
+`--no-git` replaces `git ls-files` with a walk of the current directory, which becomes the root
+(config lookup, reported paths); every walked file is what rules see as tracked. The walk never enters
+`.git`, `.hg`, `.svn`, `node_modules`, `.venv`, `venv`, `__pycache__`, `.tox`, `.mypy_cache`,
+`.pytest_cache`, `.ruff_cache`, `.cache`, `.direnv`, `.gradle`, `.next` or `.terraform` at any depth, does not follow directory symlinks, and does not read
+`.gitignore` (docs/adr/0006). Without the flag, running outside a git repository is still exit 2: the
+scan never switches scope on its own.
 File names given on the command line are not used to narrow the analysis: cross-file rules and the
 allowlist "no longer needed" check need the whole set, and a partial view would make them pass locally
 and fail in CI. Hooks therefore use `pass_filenames: false`.
@@ -259,6 +266,15 @@ Every finding goes to stdout, sorted by file, line, rule (docs/adr/0004).
   escaped like `escapeData` and `escapeProperty` in actions/toolkit `packages/core/src/command.ts`.
   The message is the text-format line, so a finding past GitHub's annotation limits (10 errors and 10
   warnings per step, 50 per job) keeps its location in the log. `action.yml` passes this format.
+- `--format sarif`: one SARIF 2.1.0 log (the version GitHub code scanning reads): one run, the tool
+  driver with a descriptor for every rule and pseudo rule, and one result per finding with `ruleId`,
+  `level` (`error` or `warning`), `message.text` and a physical location whose `uri` is the
+  percent-encoded relative path; `region.startLine` is omitted for a whole-file finding. The action
+  does not upload it (docs/adr/0006).
+
+`--path-prefix DIR` joins `DIR` in front of every reported path in every format. `action.yml` sets it
+from its `working-directory` input: the path from the workspace to the git root, when that root lies
+below the workspace, so annotations name the file as the workspace sees it.
 
 The pseudo rule `E0` reports an instruction file that is not valid UTF-8; it is always on, and only an
 allowlist entry can exempt a file; the pseudo rule `disable` reports per-line directives (Per-line

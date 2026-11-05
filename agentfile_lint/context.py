@@ -12,7 +12,7 @@ def normalize_newlines(raw: str) -> str:
 class Context:
     def __init__(self, root: Path, tracked: list[str], raw: dict[str, str]):
         self.root = root
-        self.tracked = tracked          # every `git ls-files` entry
+        self.tracked = tracked          # every `git ls-files` entry, or every walked file with `--no-git`
         # Analyzed instruction files (valid UTF-8), read once by the engine: path -> text as stored on
         # disk (`raw`, for byte, line and line-length limits) and with newlines normalized (`files`).
         self.raw = raw

@@ -18,6 +18,15 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `--format sarif` prints one SARIF 2.1.0 log for GitHub code scanning; the README shows how to upload
+  it with `github/codeql-action/upload-sarif`. The action does not upload it.
+- `--no-git` walks the current directory instead of listing git-tracked files, skipping `.git`,
+  `node_modules` and similar directories by a fixed list; `.gitignore` is not read. The default is
+  unchanged.
+- `--path-prefix DIR` prepends a directory to every reported path.
+- Action input `working-directory` (default `.`) for a repository checked out to a subdirectory:
+  `config` is relative to it and annotations point at the right file. Existing inputs are unchanged.
+
 - `[discover] extend_globs` adds globs to `globs` instead of replacing them; the lists add up along
   `extends`.
 - `[shared.duplicates] exclude` leaves files out of the R5a and R5b comparison entirely: an excluded
