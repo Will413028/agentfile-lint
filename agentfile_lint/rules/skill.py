@@ -18,7 +18,7 @@ import unicodedata
 from typing import Any
 
 from .. import frontmatter
-from ..errors import ConfigError, check_keys, expect_str_list
+from ..errors import ConfigError, check_keys, expect_str_list, levels_only
 from ..finding import Finding
 from ._text import split_lines
 
@@ -66,11 +66,7 @@ def validate(section: Any, tables: dict[str, dict[str, Any]]) -> tuple[dict[str,
     for i, target in enumerate(targets):
         if target not in TARGETS:
             raise ConfigError(f"{SECTION}.targets[{i}]: unknown reader {target!r} (expected: {', '.join(TARGETS)})")
-    effective = {}
-    for rule_id, table in tables.items():
-        check_keys(table, {"level"}, f"rules.{rule_id}")
-        effective[rule_id] = {"level": table["level"]}
-    return {"targets": list(dict.fromkeys(targets))}, effective
+    return {"targets": list(dict.fromkeys(targets))}, levels_only(tables)
 
 
 def section_json(params: dict[str, Any]) -> dict[str, Any]:

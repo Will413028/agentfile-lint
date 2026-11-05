@@ -95,6 +95,18 @@ targets = ["claude-code", "agentskills"]
 `[discover] skill_globs` replaces the `SKILL.md` glob list and `extend_skill_globs` adds to it, as
 `globs` and `extend_globs` do for instruction files. Details: [`docs/rules.md`](docs/rules.md#s1-to-s12-skillmd).
 
+### Hooks and MCP settings
+
+Claude Code settings files (`**/.claude/settings.json` and `**/.claude/settings.local.json`; the local
+one is usually git-ignored, so only `--no-git` reaches it) are
+checked by the H rules and the root `.mcp.json` by the M rules: that each is valid JSON, that hooks use
+documented event names and handler types with their required fields, that a command hook has a
+command, and that each MCP server has a known `type` and its `command` or `url`. These are the cases in
+which Claude Code skips the file or the entry, often with no sign during a session. Optional fields
+and other settings keys are not checked. `hooks_globs`/`extend_hooks_globs` and
+`mcp_globs`/`extend_mcp_globs` in `[discover]` change the file lists. Details:
+[`docs/rules.md`](docs/rules.md#h1-to-h6-hooks).
+
 ### Compared with similar tools
 
 From each tool's own documentation, checked 2026-11-03; nothing here was installed or run. "Not

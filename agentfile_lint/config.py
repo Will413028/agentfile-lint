@@ -4,8 +4,8 @@ Merge rule: tables merge key by key (the child wins); every other value, lists i
 is replaced as a whole. Two lists concatenate along the `extends` chain instead (parents first):
 `[[overrides]]`, since replacing them would silently drop the overrides of the config a file extends
 (a file removes an inherited glob with an `unset` entry), and the `discover.extend_*` lists
-(`extend_globs`, `extend_skill_globs`), which add to their glob list the way ruff's `extend-select`
-adds to `select`.
+(`extend_globs`, `extend_skill_globs`, `extend_hooks_globs`, `extend_mcp_globs`), which add to their
+glob list the way ruff's `extend-select` adds to `select`.
 """
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from .errors import (
     LEVELS, ConfigError, check_keys, expect_int, expect_str, expect_str_list, expect_table_list, require_keys,
 )
 from .finding import INPUT_RULE
-from .rules import ALIASES, MODULES, RETIRED, RULES, SECTIONS, SHARED
+from .rules import ALIASES, FAMILIES, INSTRUCTION, MODULES, RETIRED, RULES, SECTIONS, SHARED
 
 CONFIG_NAME = ".agentfile-lint.toml"
 # Migration aid for the 0.4.0 rename; remove at 1.0.
@@ -29,8 +29,10 @@ LEGACY_CONFIG_NAME = ".instruction-lint.toml"
 PRESET_PREFIX = "preset:"
 DEFAULT_PRESET = "preset:default"
 _TOP_KEYS = {"extends", "discover", "allowlist", "shared", "rules", "overrides", "check_pins", *SECTIONS}
+# File family -> its `[discover]` glob list (docs/design.md, File families).
+GLOB_KEYS = {family: "globs" if family == INSTRUCTION else f"{family}_globs" for family in FAMILIES}
 # `[discover]` list that concatenates along `extends` -> the glob list it adds to (one per file family).
-EXTEND_KEYS = {"extend_globs": "globs", "extend_skill_globs": "skill_globs"}
+EXTEND_KEYS = {f"extend_{key}": key for key in GLOB_KEYS.values()}
 PIN_DEFAULTS = {
     "repo": "agentfile-lint",
     "files": [
@@ -57,7 +59,6 @@ def default_config_path(root: Path | None) -> Path | None:
 
 @dataclass
 class Config:
-    globs: list[str]  # `discover.globs` as merged (the child replaces the list)
     allowlist: allowlist.Settings
     entries: list[allowlist.Entry]
     rules: dict[str, dict[str, Any]]  # rule id -> its merged, validated `[rules.<id>]` table, including "level"
@@ -65,29 +66,24 @@ class Config:
     params: dict[str, Any] = field(default_factory=dict)  # rule module name -> what its validate() returned
     check_pins: dict[str, Any] = field(default_factory=lambda: dict(PIN_DEFAULTS))  # repo, files
     overrides: list[overrides_mod.Override] = field(default_factory=list)
-    extend_globs: list[str] = field(default_factory=list)  # `discover.extend_globs`, concatenated along `extends`
-    skill_globs: list[str] = field(default_factory=list)  # `discover.skill_globs`: the skill file family
-    extend_skill_globs: list[str] = field(default_factory=list)  # concatenated along `extends`
+    # Every `[discover]` list by key (`GLOB_KEYS` values replace along `extends`, `EXTEND_KEYS` concatenate).
+    discover: dict[str, list[str]] = field(default_factory=dict)
     sections: dict[str, Any] = field(default_factory=dict)  # top-level table a rule module owns -> effective value
 
-    @property
-    def all_globs(self) -> list[str]:
-        """What discovery matches for instruction files: `globs` then `extend_globs`, duplicates dropped."""
-        return list(dict.fromkeys(self.globs + self.extend_globs))
+    def family_globs(self, family: str) -> list[str]:
+        """What discovery matches for a file family: its glob list then its `extend_*` list, duplicates dropped."""
+        key = GLOB_KEYS[family]
+        return list(dict.fromkeys(self.discover[key] + self.discover[f"extend_{key}"]))
 
-    @property
-    def all_skill_globs(self) -> list[str]:
-        """What discovery matches for skill files: `skill_globs` then `extend_skill_globs`."""
-        return list(dict.fromkeys(self.skill_globs + self.extend_skill_globs))
+    def all_globs(self) -> list[str]:
+        """Every family's globs: what a file name must match to be relevant to a run."""
+        return list(dict.fromkeys(g for family in GLOB_KEYS for g in self.family_globs(family)))
 
 
 def to_jsonable(cfg: "Config") -> dict[str, Any]:
     """The effective configuration as plain JSON data (dates as ISO strings)."""
     return {
-        "discover": {
-            "globs": cfg.globs, "extend_globs": cfg.extend_globs,
-            "skill_globs": cfg.skill_globs, "extend_skill_globs": cfg.extend_skill_globs,
-        },
+        "discover": dict(cfg.discover),
         "allowlist": {
             "max_days": cfg.allowlist.max_days,
             "max_entries": cfg.allowlist.max_entries,
@@ -275,9 +271,13 @@ def _validate(raw: dict[str, Any], today: datetime.date) -> Config:
     check_keys(raw, _TOP_KEYS | set(EXTEND_KEYS), "config")  # the extend_* lists: collected by _load_raw
     discover = raw.get("discover", {})
     check_keys(discover, set(EXTEND_KEYS.values()), "discover")  # the extend_* lists were taken out while loading
-    globs = expect_str_list(discover.get("globs"), "discover.globs")
-    # Empty turns the skill family off; `globs` stays non-empty, since instruction files are the tool's point.
-    skill_globs = expect_str_list(discover.get("skill_globs"), "discover.skill_globs", allow_empty=True)
+    # Empty turns a family off; `globs` stays non-empty, since instruction files are the tool's point.
+    lists = {
+        key: expect_str_list(discover.get(key), f"discover.{key}", allow_empty=key != GLOB_KEYS[INSTRUCTION])
+        for key in GLOB_KEYS.values()
+    }
+    for name, key in EXTEND_KEYS.items():
+        lists[name] = list(raw.get(name, []))
 
     al = raw.get("allowlist", {})
     check_keys(al, {"max_days", "max_entries", "warn_days", "entries"}, "allowlist")
@@ -329,7 +329,6 @@ def _validate(raw: dict[str, Any], today: datetime.date) -> Config:
     shared = {group: shared_raw[group] for group in SHARED}
     sections = {name: module.section_json(params[module.__name__]) for name, module in SECTIONS.items()}
     return Config(
-        globs=globs, allowlist=settings, entries=entries, rules=rules, shared=shared, params=params,
-        check_pins=pins, overrides=overrides, extend_globs=list(raw.get("extend_globs", [])),
-        skill_globs=skill_globs, extend_skill_globs=list(raw.get("extend_skill_globs", [])), sections=sections,
+        allowlist=settings, entries=entries, rules=rules, shared=shared, params=params,
+        check_pins=pins, overrides=overrides, discover=lists, sections=sections,
     )

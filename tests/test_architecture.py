@@ -5,7 +5,7 @@ import helpers
 
 PACKAGE = "agentfile_lint"
 # What a rule module may import from the package: the core it runs on, never the command layer.
-RULE_ALLOWED = {"context", "discover", "errors", "finding", "frontmatter", "rules", "rules._text"}
+RULE_ALLOWED = {"context", "discover", "errors", "finding", "frontmatter", "rules", "rules._json", "rules._text"}
 # Vendored third-party code (PyYAML): its own imports are not checked; only frontmatter.py may use it.
 VENDORED = f"{PACKAGE}._yaml"
 VENDORED_USERS = {f"{PACKAGE}.frontmatter"}

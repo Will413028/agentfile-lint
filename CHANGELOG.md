@@ -24,6 +24,27 @@ versions follow [Semantic Versioning](https://semver.org/).
   types (docs/rules.md, docs/adr/0007).
   `config --format json` shows `skills` and the two new `discover` keys; the E0 description now reads
   "analyzed file".
+- Hook rules H1 to H6 and `.mcp.json` rules M1 to M4, all at `warn`, on two new file families:
+  `[discover] hooks_globs` (default `["**/.claude/settings.json", "**/.claude/settings.local.json"]`)
+  and `mcp_globs` (default `[".mcp.json"]`, the root only), each with an `extend_*` list that
+  concatenates along `extends`; an empty list turns its family off. H: the settings file is valid JSON
+  and an object (H1), event names are documented ones (H2), the documented shape (H3), a known handler
+  `type` (H4), each type's required string fields (H5), a non-empty `command` (H6). M: valid JSON and
+  an object (M1), an `mcpServers` object (M2), a known server `type` (M3), `command` for stdio or
+  `url` for remote servers (M4). Only checks whose failure makes Claude Code skip the file or the
+  entry (measured with `claude doctor` and `claude mcp list` on 2.1.318), plus H6; optional fields
+  are not checked (docs/rules.md). `config --format json` shows the four new `discover` keys.
+
+### Changed
+
+- The `allowlist` notes for an entry or override glob that matches no analyzed file now say "analyzed
+  file" instead of "analyzed instruction file", since SKILL.md, settings and `.mcp.json` files are
+  analyzed too; a directive naming an S, H or M id names that id's file family.
+
+### Fixed
+
+- File names on the command line now start a run when they match any file family's globs. Before,
+  only instruction-file names did, so `agentfile-lint path/to/SKILL.md` printed nothing.
 
 ## [0.8.0] - 2026-11-05
 

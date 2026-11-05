@@ -62,6 +62,12 @@ class ConfigJsonTest(unittest.TestCase):
                 self.assertEqual(doc["discover"].pop("extend_skill_globs"), [])
                 self.assertEqual(doc.pop("skills"), {"targets": ["claude-code"]})
                 self.assertEqual([doc["rules"].pop(f"S{i}") for i in range(1, 13)], [{"level": "warn"}] * 12)
+                self.assertEqual(doc["discover"].pop("hooks_globs"), ["**/.claude/settings.json", "**/.claude/settings.local.json"])
+                self.assertEqual(doc["discover"].pop("extend_hooks_globs"), [])
+                self.assertEqual(doc["discover"].pop("mcp_globs"), [".mcp.json"])
+                self.assertEqual(doc["discover"].pop("extend_mcp_globs"), [])
+                self.assertEqual([doc["rules"].pop(f"H{i}") for i in range(1, 7)], [{"level": "warn"}] * 6)
+                self.assertEqual([doc["rules"].pop(f"M{i}") for i in range(1, 5)], [{"level": "warn"}] * 4)
                 self.assertEqual(json.dumps(doc, sort_keys=True, indent=2, ensure_ascii=False) + "\n", (SNAPSHOTS / f"{preset}.json").read_text())
 
     def test_prints_the_effective_table_of_a_multi_id_module(self):

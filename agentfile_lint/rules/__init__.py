@@ -7,8 +7,9 @@ Each module exposes:
 - `SHARED` (optional): (group, keys), the `[shared.<group>]` table its ids share.
 - `SECTION` (optional): the name of a top-level table the module owns (`[skills]`); `validate` gets it
   in place of `shared`, and `section_json(params)` gives its effective value for `config --format json`.
-- `FAMILY` (optional, default "instruction"): the file family `check` runs on. Instruction files are
-  `[discover] globs`; skill files are `[discover] skill_globs` (docs/design.md, File families).
+- `FAMILY` (optional, default "instruction"): the file family `check` runs on, one of `FAMILIES`.
+  Instruction files are `[discover] globs`; every other family is `[discover] <family>_globs`
+  (docs/design.md, File families).
 - `validate(shared, tables)`: `shared` is the validated-for-keys `[shared.<group>]` table (or None),
   `tables` maps each of its ids to its `[rules.<id>]` table; returns (params, effective): the module's
   params and, for each of its ids, its effective `[rules.<id>]` table (defaults filled in; `level`
@@ -20,9 +21,9 @@ Rules read parameters only; repo-specific behaviour is configuration, never a br
 """
 from __future__ import annotations
 
-from . import claude_md, constants, duplicate, paths, rot, shape, size, skill, specrefs, testnames
+from . import claude_md, constants, duplicate, hooks, mcp, paths, rot, shape, size, skill, specrefs, testnames
 
-MODULES = (size, shape, testnames, paths, specrefs, rot, duplicate, constants, claude_md, skill)
+MODULES = (size, shape, testnames, paths, specrefs, rot, duplicate, constants, claude_md, skill, hooks, mcp)
 
 # rule id -> its module, in report order.
 RULES = {rule_id: module for module in MODULES for rule_id, _, _ in module.CHECKS}
@@ -35,8 +36,17 @@ if len(ALIASES) != len(RULES) or set(ALIASES) & set(RULES):
     raise RuntimeError("rule names must be unique and must not equal a rule id")
 
 INSTRUCTION = "instruction"
+# Every file family, in discovery order: instruction files, SKILL.md, hooks settings, .mcp.json.
+FAMILIES = (INSTRUCTION, "skill", "hooks", "mcp")
+# File family -> what its files are, for messages.
+FAMILY_FILES = {
+    INSTRUCTION: "instruction files", "skill": "SKILL.md files", "hooks": "Claude Code settings files",
+    "mcp": ".mcp.json files",
+}
 # rule module -> the file family it checks.
 FAMILY = {module: getattr(module, "FAMILY", INSTRUCTION) for module in MODULES}
+if not set(FAMILY.values()) <= set(FAMILIES):
+    raise RuntimeError("a rule module names a file family that FAMILIES does not list")
 # Top-level table -> the module that owns it.
 SECTIONS = {module.SECTION: module for module in MODULES if hasattr(module, "SECTION")}
 

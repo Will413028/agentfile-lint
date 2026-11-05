@@ -43,6 +43,16 @@ new ids.
 | [S10](#s1-to-s12-skillmd) | `skill-compatibility` | `compatibility` is 1 to 500 characters | objective, `agentskills` target | warn, not run | same |
 | [S11](#s1-to-s12-skillmd) | `skill-keys` | only the specification's six frontmatter keys | objective, `agentskills` target | warn, not run | same |
 | [S12](#s1-to-s12-skillmd) | `skill-name-refused` | no character Claude Code refuses in `name` or the directory name | objective | warn | same |
+| [H1](#h1-to-h6-hooks) | `settings-json` | a settings file is valid JSON and an object | objective | warn | same |
+| [H2](#h1-to-h6-hooks) | `hooks-event` | hook event names are documented ones | objective | warn | same |
+| [H3](#h1-to-h6-hooks) | `hooks-shape` | `hooks`, event lists, matcher groups and handler lists have the documented shape | objective | warn | same |
+| [H4](#h1-to-h6-hooks) | `hooks-type` | every hook handler has a documented `type` | objective | warn | same |
+| [H5](#h1-to-h6-hooks) | `hooks-required` | every hook handler has its type's required fields | objective | warn | same |
+| [H6](#h1-to-h6-hooks) | `hooks-empty-command` | a command hook's `command` is not empty | objective | warn | same |
+| [M1](#m1-to-m4-mcpjson) | `mcp-json` | `.mcp.json` is valid JSON and an object | objective | warn | same |
+| [M2](#m1-to-m4-mcpjson) | `mcp-servers` | servers sit under an `mcpServers` object | objective | warn | same |
+| [M3](#m1-to-m4-mcpjson) | `mcp-type` | every server entry is an object with a documented `type` | objective | warn | same |
+| [M4](#m1-to-m4-mcpjson) | `mcp-required` | every server has `command` (stdio) or `url` | objective | warn | same |
 | [allowlist](#allowlist) | — | exceptions are current and still needed | objective | error | error |
 | [disable](#disable) | — | per-line directives are well formed and still needed | objective | error | error |
 
@@ -211,7 +221,7 @@ did not recognize as the import. 0.5.0 with `preset:strict` reports 26 of them.
 Why: a debt exception without an end date becomes permanent without anyone deciding so. Every allowlist
 entry has a reason and an expiry date at most `max_days` (90) ahead; an expired entry, or one that no
 longer suppresses anything, fails. A path that is meant to differ for good goes in `[[overrides]]`
-instead, with a required reason; each glob of an override that matches no analyzed instruction file is
+instead, with a required reason; each glob of an override that matches no analyzed file is
 a warning on the config file that wrote it (an inherited one is removed with `unset`), so a stale
 override shows up without failing CI unless `--warn-as-error` is given.
 
@@ -302,8 +312,83 @@ verdict and the same checks; the other 260 all use a flow collection that strict
 there, valid YAML here, so those files show only their other findings, mostly S11). R and C findings
 on the sample are the same as 0.8.0's.
 
+## H1 to H6 hooks
+
+Why: Claude Code reads hooks from the `hooks` key of its settings files, and a hook it cannot load
+does not run, usually without a sign during the session: Claude Code reports it at startup or in
+`claude doctor` and goes on without it
+([settings](https://code.claude.com/docs/en/settings), "Fix a broken settings file"). Files:
+`[discover] hooks_globs`, default `**/.claude/settings.json` and `**/.claude/settings.local.json`
+(Claude Code reads `.claude/settings.json` from the directory a session starts in, so a nested project
+directory has its own; `settings.local.json` is usually git-ignored and is then reached only with
+`--no-git`). `extend_hooks_globs` adds to the list; `hooks_globs = []` turns the family off. Only the H
+rules run on these files.
+
+| Id | Finding | Source | What Claude Code does (`claude doctor`, 2.1.318) |
+|---|---|---|---|
+| H1 | the file is not valid JSON (reported at the error's line), or its top-level value is not an object | settings, "Fix a broken settings file": "invalid JSON" is a Settings Error | does not apply the file ("Invalid or malformed JSON") |
+| H2 | a key of `hooks` is not a documented event name (names are case-sensitive) | [hooks reference](https://code.claude.com/docs/en/hooks), "Hook lifecycle": 33 events | ignores that event's hooks ("Unknown hook event … was ignored") |
+| H3 | `hooks` is not an object; an event's value is not an array; a matcher group is not an object, has no `hooks` array, or has a `matcher` that is not a string; a handler is not an object | settings reference, `hooks`: "object keyed by hook event; each value is an array of `{ "matcher", "hooks" }` groups" | ignores that level |
+| H4 | a handler has no `type`, or one other than `command`, `http`, `mcp_tool`, `prompt`, `agent` | hooks reference, "Common fields": `type` required | ignores the handler |
+| H5 | a handler lacks a field its type marks required, or has it as a non-string: `command` (command), `url` (http), `server` and `tool` (mcp_tool), `prompt` (prompt, agent) | hooks reference, "Hook handler fields" tables | ignores the handler |
+| H6 | a command hook's `command` is empty or blank | hooks reference, `command`: "Shell command to execute" | loads it without a warning; it runs no program |
+
+Under `PreToolUse` and `PermissionRequest`, an H3 to H5 failure is wider: `claude doctor` says such a
+hook "may be what guards the permissions declared beside it, so nothing it sits in is applied until the
+entry is fixed or removed", and the message says so. An unknown event (H2) is not checked further.
+
+Readings:
+
+- JSON is read as Claude Code reads it (measured): a leading UTF-8 byte order mark is accepted, an
+  empty or blank file is no settings, and `NaN`, `Infinity`, comments and trailing commas are invalid
+  (JavaScript's `JSON.parse` rejects them). A file nested too deeply for Python's parser is H1 with a
+  message that it was not checked.
+- Positions are JSON paths in the form `claude doctor` prints (`hooks.PreToolUse.0.hooks.1`); the line
+  is the whole file except for H1's syntax error.
+- Not checked: the types of optional fields (`timeout`, `async`, `args`, `if` and the rest; Claude Code
+  drops a handler whose optional field has the wrong type, but following every optional field is a
+  key table that changes with each Claude Code release), whether an http hook's `url` is a URL Claude
+  Code accepts (it ignores the hook when not, an empty `url` included; URL parsing is not a required-field
+  check), empty `prompt`, `server` or `tool` (Claude Code loads them), other settings keys, `matcher`
+  syntax, and hooks in plugin `hooks/hooks.json`, skill or subagent frontmatter.
+
+Per-line directives cannot name H ids (JSON has no comments); use an allowlist entry or an override.
+
+Measured: objective, so no false-positive rate. On the 22-repository sample of docs/field-report.md
+(2026-11-06), the default globs find 5 settings files in 4 repositories, all valid, with H findings
+in none; R, C and S findings are the same as before the H rules.
+
+## M1 to M4 .mcp.json
+
+Why: a project's `.mcp.json` is how a team shares MCP servers, and Claude Code skips a server it
+cannot read, or the whole file, reporting it only in `claude mcp list` and `/mcp`
+([MCP](https://code.claude.com/docs/en/mcp), "Project scope", "Configuration warnings"). Files:
+`[discover] mcp_globs`, default `.mcp.json` at the repository root only: Claude Code reads project MCP
+servers from there, and a plugin's `.mcp.json` has another format (servers at the top level, no
+`mcpServers` key), so adding plugin paths with `extend_mcp_globs` reports M2 on each.
+`mcp_globs = []` turns the family off. Only the M rules run on these files.
+
+| Id | Finding | Source | What Claude Code does (`claude mcp list`, 2.1.318) |
+|---|---|---|---|
+| M1 | the file is not valid JSON (reported at the error's line), or its top-level value is not an object | MCP, "Project scope": the file's format | loads no server from it ("MCP config is not a valid JSON") |
+| M2 | no `mcpServers` object: missing, another type, or servers under `servers` (VS Code's format) | [debug your config](https://code.claude.com/docs/en/debug-your-config): servers under `servers` "never load" | loads no server from the file |
+| M3 | a server entry is not an object, or its `type` is not `stdio`, `http`, `streamable-http`, `sse` or `ws`; `"sdk"` is named separately | MCP, "Add a remote WebSocket server" and the transports; `"sdk"`: "Claude Code skips a `"type": "sdk"` entry in `.mcp.json`" | skips the server |
+| M4 | a stdio server (no `type`, or `"stdio"`) has no non-empty string `command`, or a remote server has no string `url`; an entry with a `url` and no `type` says to add one | MCP: "A JSON entry that has a `url` but no `type` is a configuration error"; the required fields are what `claude mcp list` reports | skips the server ("command: expected string", "Command cannot be empty", "url: expected string") |
+
+Readings:
+
+- JSON is read as for H1. Positions are JSON paths (`mcpServers.<name>`).
+- M4's required fields are measured, not stated in the MCP docs, which show them in every example.
+- Not checked: optional fields and their types (`args`, `env`, `headers`, `timeout` and the rest),
+  blank values Claude Code only warns about (a `command` of spaces, an empty `url`), reserved server
+  names, unset `${VAR}` references, and `.mcp.json` files in plugins.
+
+Measured: objective, so no false-positive rate. On the 22-repository sample (2026-11-06), the default
+glob finds 2 root `.mcp.json` files, both valid, with M findings in none; a third `.mcp.json` in the
+sample sits in a plugin directory, in the plugin format, and is not matched.
+
 ## Rule ids for other files
 
 Rules for other file types get an id prefix per family, so ids stay unique as checks are added: `S` for
-`SKILL.md` (above), `H` for hooks and `M` for MCP configuration (planned). `R` and `C` stay with
+`SKILL.md`, `H` for hooks in settings files and `M` for `.mcp.json` (above). `R` and `C` stay with
 instruction files, and `E` is reserved for input errors such as `E0`.

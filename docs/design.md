@@ -43,9 +43,10 @@ effective config + git ls-files or the --no-git walk (full set) -> rules -> find
 - Merge: tables merge key by key (the child wins); every other value, lists included, is replaced.
   Two lists concatenate along the `extends` chain instead, parents first: `[[overrides]]`, because
   replacing them would silently drop the overrides of the config a file extends (a child removes an
-  inherited glob with an `unset` entry, see Overrides), and `discover.extend_globs` and
-  `discover.extend_skill_globs`, which add to `discover.globs` and `discover.skill_globs` the way ruff's
-  `extend-select` adds to `select` (a child that replaces `globs` keeps every inherited `extend_globs`). The shipped presets carry no overrides: a path scope belongs to one
+  inherited glob with an `unset` entry, see Overrides), and the `discover.extend_*` lists
+  (`extend_globs`, `extend_skill_globs`, `extend_hooks_globs`, `extend_mcp_globs`), each of which adds
+  to its family's glob list the way ruff's `extend-select` adds to `select` (a child that replaces
+  `globs` keeps every inherited `extend_globs`). The shipped presets carry no overrides: a path scope belongs to one
   repository's layout.
 - Unknown keys, unknown rule ids and malformed allowlist entries fail the configuration (exit 2).
   A typo must not silently disable a check.
@@ -76,15 +77,17 @@ Each rule module checks one family of files, and each family has its own glob li
 |---|---|---|---|
 | instruction | `discover.globs`, `discover.extend_globs` | `AGENTS.md`, `CLAUDE.md` at any depth | R1a to R6, C1 |
 | skill | `discover.skill_globs`, `discover.extend_skill_globs` | `**/SKILL.md` | S1 to S12 |
+| hooks | `discover.hooks_globs`, `discover.extend_hooks_globs` | `**/.claude/settings.json`, `**/.claude/settings.local.json` | H1 to H6 |
+| mcp | `discover.mcp_globs`, `discover.extend_mcp_globs` | `.mcp.json` (root only) | M1 to M4 |
 
 Rules of one family never see the files of another: R2 to R6 do not run on `SKILL.md`, and R5a does
 not compare a `SKILL.md` with the `AGENTS.md` above it (one is loaded on demand, the other whenever an
 agent works in the directory). A file both lists match is in both families. The `.local.md` exclusion,
 the deleted-file skip, `--no-git`, the same-directory alias rule above and the E0 check apply to
 every family. Per-line directives are read from instruction files only:
-text in a `SKILL.md` body is skill content, and its frontmatter cannot hold an HTML comment, so S ids
-cannot be named in a directive (an allowlist entry or an override covers them). Hooks and MCP files
-are planned as further families.
+text in a `SKILL.md` body is skill content, and its frontmatter cannot hold an HTML comment, and JSON
+has no comments, so S, H and M ids cannot be named in a directive (an allowlist entry or an override
+covers them). An empty glob list turns its family off, except `globs`, which must stay non-empty.
 
 Which S ids run also depends on `[skills] targets` (default `["claude-code"]`): each S id belongs to
 the readers it protects, and an id that no listed reader reads does not run, whatever its level or an
@@ -93,7 +96,8 @@ empty `targets` or `skill_globs` turns the skill family off (`globs` must stay n
 
 File names given on the command line are not used to narrow the analysis: cross-file rules and the
 allowlist "no longer needed" check need the whole set, and a partial view would make them pass locally
-and fail in CI. Hooks therefore use `pass_filenames: false`.
+and fail in CI. They only decide whether to run at all: a run goes ahead when a name matches any
+family's globs or is the config file. Hooks therefore use `pass_filenames: false`.
 
 Trigger scope: R3a, R3b and R3c depend on test files, source and docs, not only on instruction files,
 so a hook or workflow must not filter by instruction-file paths. The pre-commit hook sets
@@ -222,7 +226,7 @@ Each entry: `paths` (globs), `rules` (rule id or alias -> level), `reason`, opti
   outside the paths is still reported.
 - Overrides run before the allowlist: an allowlist entry for a finding an override drops is no longer
   needed.
-- Each glob of an entry (after `unset`) must match an analyzed instruction file; otherwise a warning
+- Each glob of an entry (after `unset`) must match an analyzed file of any family; otherwise a warning
   (rule `allowlist`, whole file, on the config file that wrote the entry: repo-relative inside the
   repository, as given outside it, naming `overrides[i]` by its index in that file). An entry reached
   through `extends` says `(inherited through extends)` and points at `unset`: a shared config serves

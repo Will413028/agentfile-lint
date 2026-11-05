@@ -9,6 +9,10 @@ extends = []
 globs = ["AGENTS.md", "**/AGENTS.md", "CLAUDE.md", "**/CLAUDE.md"]
 # SKILL.md files are a family of their own: only the S rules run on them, and R and C rules never do.
 skill_globs = ["**/SKILL.md"]
+# Claude Code settings files (H rules): read from the directory a session starts in, at any depth.
+hooks_globs = ["**/.claude/settings.json", "**/.claude/settings.local.json"]
+# Project MCP servers (M rules): only the repository root's .mcp.json.
+mcp_globs = [".mcp.json"]
 
 [allowlist]
 max_days = 90     # reject `expires` later than today + max_days
@@ -224,4 +228,39 @@ level = "warn"
 level = "warn"
 
 [rules.S12]
+level = "warn"
+
+# ---------------------------------------------------------------------------------------------
+# H1 to H6: hooks in Claude Code settings files; M1 to M4: .mcp.json (docs/rules.md, "H1 to H6
+# hooks" and "M1 to M4 .mcp.json"). Only what the Claude Code docs state and what makes Claude Code
+# skip the file or an entry; optional fields and other keys are not checked.
+# ---------------------------------------------------------------------------------------------
+[rules.H1]
+level = "warn"
+
+[rules.H2]
+level = "warn"
+
+[rules.H3]
+level = "warn"
+
+[rules.H4]
+level = "warn"
+
+[rules.H5]
+level = "warn"
+
+[rules.H6]
+level = "warn"
+
+[rules.M1]
+level = "warn"
+
+[rules.M2]
+level = "warn"
+
+[rules.M3]
+level = "warn"
+
+[rules.M4]
 level = "warn"

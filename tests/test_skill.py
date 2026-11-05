@@ -249,6 +249,12 @@ class DiscoveryAndConfigTest(unittest.TestCase):
         self.assertEqual(rules_of(files, "targets = []"), [])
         self.assertEqual(rules_of(files, extra="[discover]\nskill_globs = []\n"), [])
 
+    def test_a_skill_file_named_on_the_command_line_triggers_the_run(self):
+        # argv names decide whether to run at all; a SKILL.md name is relevant (0.9.0 fix, step 3).
+        root = make_repo({"AGENTS.md": "ok\n", "s/a/SKILL.md": "---\n- x\n---\n"})
+        r = run_new(root, "--format", "json", "s/a/SKILL.md")
+        self.assertEqual([f["rule"] for f in json.loads(r.stdout)["findings"]], ["S1"])
+
     def test_targets_cannot_be_bypassed_by_an_override(self):
         extra = '[[overrides]]\npaths = ["s/**"]\nrules = { S11 = "warn" }\nreason = "try"\n'
         text = "---\nname: a\ndescription: d\nversion: 1\n---\n"
