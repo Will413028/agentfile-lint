@@ -11,22 +11,22 @@ import unittest
 import helpers
 from agentfile_lint.finding import Finding, format_github
 
-# A line R5 reports (>= 40 characters) that holds every character GitHub escaping cares about in a message.
+# A line R5a reports (>= 40 characters) that holds every character GitHub escaping cares about in a message.
 SHARED = "Use 100% of the budget: split it a, b and c across the files"
 CONFIG = (
-    "[rules.R1]\nmax_line_chars = 500\n"
-    '[[rules.R1.limits]]\nglob = "AGENTS.md"\nmax_lines = 1\nlines_level = "warn"\n'
+    '[rules.R1d]\nlevel = "error"\nmax_chars = 500\n'
+    '[[rules.R1b.limits]]\nglob = "AGENTS.md"\nmax_lines = 1\n'
 )
 FILES = {
     "AGENTS.md": SHARED + "\n" + "y" * 600 + "\n",  # whole-file warning (2 lines) and a line error
-    "a,b/AGENTS.md": SHARED + "\n",                  # R5 warning on a path with a comma
+    "a,b/AGENTS.md": SHARED + "\n",                  # R5a warning on a path with a comma
     ".agentfile-lint.toml": CONFIG,
 }
 R5_MESSAGE = f"line repeats AGENTS.md:1 ('{SHARED}'); keep it in the ancestor only"
 TEXT = [
-    "AGENTS.md: warning: R1: file is 2 lines, limit 1",
-    "AGENTS.md:2: error: R1: line is 600 characters, limit 500",
-    f"a,b/AGENTS.md:1: warning: R5: {R5_MESSAGE}",
+    "AGENTS.md: warning: R1b: file is 2 lines, limit 1",
+    "AGENTS.md:2: error: R1d: line is 600 characters, limit 500",
+    f"a,b/AGENTS.md:1: warning: R5a: {R5_MESSAGE}",
 ]
 
 
@@ -49,7 +49,7 @@ class TextFormatTest(unittest.TestCase):
         self.assertEqual(run(FILES, "--format", "text").stdout, run(FILES).stdout)
 
     def test_non_ascii_output_survives_a_non_utf8_pipe(self):
-        # A Windows runner pipes stdout as cp1252; findings quote file text (here an R5 line in CJK).
+        # A Windows runner pipes stdout as cp1252; findings quote file text (here an R5a line in CJK).
         line = "所有指令檔都必須通過檢查，否則持續整合會失敗並停止合併這個變更；例外要寫在設定檔並附上理由與期限"  # >= 40 chars
         root = helpers.make_repo({"AGENTS.md": line + "\n", "sub/AGENTS.md": line + "\n"})
         env = dict(helpers.os.environ, PYTHONPATH=str(helpers.REPO), PYTHONIOENCODING="cp1252")
@@ -57,7 +57,7 @@ class TextFormatTest(unittest.TestCase):
             r = helpers.subprocess.run([helpers.sys.executable, "-m", "agentfile_lint", "--format", fmt],
                                        cwd=root, env=env, capture_output=True)
             self.assertEqual((r.returncode, r.stderr), (0, b""), fmt)
-            self.assertIn(line[:20].encode("utf-8"), r.stdout, fmt)  # R5 quotes the start of the line
+            self.assertIn(line[:20].encode("utf-8"), r.stdout, fmt)  # R5a quotes the start of the line
 
     def test_unknown_format_is_a_usage_error(self):
         r = run(FILES, "--format", "sarif")
@@ -72,9 +72,9 @@ class JsonFormatTest(unittest.TestCase):
         self.assertEqual(json.loads(r.stdout), {
             "version": 1,
             "findings": [
-                {"file": "AGENTS.md", "line": None, "level": "warning", "rule": "R1", "message": "file is 2 lines, limit 1"},
-                {"file": "AGENTS.md", "line": 2, "level": "error", "rule": "R1", "message": "line is 600 characters, limit 500"},
-                {"file": "a,b/AGENTS.md", "line": 1, "level": "warning", "rule": "R5", "message": R5_MESSAGE},
+                {"file": "AGENTS.md", "line": None, "level": "warning", "rule": "R1b", "message": "file is 2 lines, limit 1"},
+                {"file": "AGENTS.md", "line": 2, "level": "error", "rule": "R1d", "message": "line is 600 characters, limit 500"},
+                {"file": "a,b/AGENTS.md", "line": 1, "level": "warning", "rule": "R5a", "message": R5_MESSAGE},
             ],
         })
 
@@ -100,9 +100,9 @@ class GithubFormatTest(unittest.TestCase):
         self.assertEqual((r.returncode, r.stderr), (1, ""))
         self.assertEqual(r.stdout.splitlines(), [
             # Whole file: no `line`, so GitHub shows it on line 1; the message keeps the text line.
-            "::warning file=AGENTS.md,title=R1::AGENTS.md: warning: R1: file is 2 lines, limit 1",
-            "::error file=AGENTS.md,line=2,title=R1::AGENTS.md:2: error: R1: line is 600 characters, limit 500",
-            "::warning file=a%2Cb/AGENTS.md,line=1,title=R5::a,b/AGENTS.md:1: warning: R5: "
+            "::warning file=AGENTS.md,title=R1b::AGENTS.md: warning: R1b: file is 2 lines, limit 1",
+            "::error file=AGENTS.md,line=2,title=R1d::AGENTS.md:2: error: R1d: line is 600 characters, limit 500",
+            "::warning file=a%2Cb/AGENTS.md,line=1,title=R5a::a,b/AGENTS.md:1: warning: R5a: "
             + R5_MESSAGE.replace("%", "%25"),
         ])
 
@@ -132,7 +132,7 @@ class InputRuleTest(unittest.TestCase):
     BAD = {"AGENTS.md": b"ok\n\xff\xfe\n"}
 
     def entry(self, rule):
-        return f'[[allowlist.entries]]\nrule = "{rule}"\npath = "AGENTS.md"\nreason = "binary for now"\nexpires = 2026-06-30\n'
+        return f'[[allowlist.entries]]\nrule = "{rule}"\npath = "AGENTS.md"\ncount = 1\nreason = "binary for now"\nexpires = 2026-06-30\n'
 
     def test_reported_as_e0(self):
         r = run(self.BAD)

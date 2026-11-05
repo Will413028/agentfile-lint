@@ -35,6 +35,9 @@ effective config + git ls-files (full set) -> rules -> findings -> overrides -> 
 
 - Rules are data: a rule module reads parameters, and repo-specific behaviour is never a
   branch in code. Differences between repositories are config values.
+- One rule id is one check with one level. A module may report several ids (R1a to R1d, R4a and R4b,
+  R5a and R5b) from one computation; parameters those ids share live in `[shared.<group>]`, the rest
+  in `[rules.<id>]` (docs/adr/0005).
 - Merge: tables merge key by key (the child wins); every other value, lists included, is replaced.
   The one exception is `[[overrides]]`: the lists concatenate, parents first, because replacing them
   would silently drop the overrides of the config a file extends. A child therefore cannot undo an
@@ -51,7 +54,7 @@ working tree. Two discovered paths in the same directory that are the same file 
 non-symlink path is analyzed (the first in sort order when all are symlinks), so no rule reports the
 same text twice. The same file in another
 directory is a separate load location and is analyzed on its own; when it sits in an ancestor or
-descendant directory, an agent working there loads both, and R5 reports the repeated lines. A
+descendant directory, an agent working there loads both, and R5a reports the repeated lines. A
 symlink to a file outside the discovered set is analyzed as its own file; a dangling one is skipped.
 File names given on the command line are not used to narrow the analysis: cross-file rules and the
 allowlist "no longer needed" check need the whole set, and a partial view would make them pass locally
@@ -63,51 +66,56 @@ so a hook or workflow must not filter by instruction-file paths. The pre-commit 
 commit and push; cross-file rules read the whole tracked set. Add a weekly `schedule` in CI so allowlist
 expiry warnings appear without commits.
 
-## Rule R1: size
+## Rules R1a to R1d: size
 
-- Limits come from `limits`, an ordered list of `{glob, max_bytes, max_lines, bytes_level, lines_level}`
-  entries (either or both limits; each level is optional and defaults to the rule level, which caps it). The first entry whose glob matches the path applies; a file that matches no entry has no size
-  limit, so the default preset ends with entries that cover every discovered file. Globs use the matcher
-  of R2 shapes and R3c specs: `*` and `?` never cross `/`, `**/` matches zero or more directories.
-  Depth tiers are written as globs: `AGENTS.md`, `*/AGENTS.md`, `**/AGENTS.md`.
-- `path_limits`: `{glob, max_bytes, level}` entries for the combined size of a file and the files
-  matching the same glob in its strict ancestor directories; every entry applies (unlike `limits`).
+Size is four rules, each with one level (docs/adr/0005): `R1a` per-file bytes (`file-bytes`), `R1b`
+per-file lines (`file-lines`), `R1c` combined bytes on a path (`path-bytes`) and `R1d` line length
+(`line-length`). They share `[shared.size]`; each `[rules.<id>]` holds its level and its own keys.
+
+- `R1a.limits` (`{glob, max_bytes}`) and `R1b.limits` (`{glob, max_lines}`): ordered lists; the first
+  entry whose glob matches the path applies, and a file that matches no entry has no limit. Globs use
+  the matcher of R2 shapes and R3c specs: `*` and `?` never cross `/`, `**/` matches zero or more
+  directories. Depth tiers are written as globs: `AGENTS.md`, `*/AGENTS.md`, `**/AGENTS.md`.
+- `R1c.limits`: `{glob, max_bytes}` entries for the combined size of a file and the files matching the
+  same glob in its strict ancestor directories; every entry applies (unlike R1a and R1b).
   Sizes are the bytes on disk, as the agent reads them: `excluded_blocks` and CRLF are not discounted.
   The finding is on the file where the total first exceeds the limit; files below it are not reported
   again, and a single file over the limit is reported the same way. The glob is meant to match one file
   per directory (`**/AGENTS.md`); Codex also loads `AGENTS.override.md` or fallback names instead of
   AGENTS.md, which the default does not model (revisit when an issue reports such a repository).
-- Default preset: only limits an agent's documentation states. AGENTS.md files on one path that total
-  over 32768 bytes are an error: Codex reads AGENTS.md from the root down to the working directory and
-  stops adding files at 32 KiB in total (`project_doc_max_bytes`,
-  https://learn.chatgpt.com/docs/agent-configuration/agents-md). `**/AGENTS.md` and `**/CLAUDE.md` over
-  200 lines are a warning: Claude Code asks for fewer than 200 lines per CLAUDE.md file and reads
+- `R1d.max_chars`: per-line limit in characters, required when R1d is not `off`.
+- Default preset: only limits an agent's documentation states. R1c at `error`: AGENTS.md files on one
+  path that total over 32768 bytes; Codex reads AGENTS.md from the root down to the working directory
+  and stops adding files at 32 KiB in total (`project_doc_max_bytes`,
+  https://learn.chatgpt.com/docs/agent-configuration/agents-md). R1b at `warn`: `**/AGENTS.md` and
+  `**/CLAUDE.md` over 200 lines; Claude Code asks for fewer than 200 lines per CLAUDE.md file and reads
   AGENTS.md when there is no CLAUDE.md (https://code.claude.com/docs/en/memory). It also cuts a file
   it loads on demand (a subdirectory CLAUDE.md, CLAUDE.local.md, path-scoped rules) to its first 40,000
   characters with a 200K context and warns about large files at startup; the default does not check
-  characters, so a CLAUDE.md under 200 lines with long or non-ASCII lines passes (docs/rules.md, R1).
-  Every default error must point to such a hard limit (docs/adr/0003).
-- The old `max_bytes` tier table is rejected with a message that points to the migration note in the
-  changelog.
-- Per-line limit in characters (`max_line_chars`), optional; omitted (the default), it is not checked.
-  A merged config cannot remove a key, so once a parent config sets it, a child can only raise it.
-- `excluded_blocks`: marker pairs; the text from a begin marker through the end marker (and one
-  trailing LF, CRLF or CR) does not count toward any single-file check: `limits` bytes and lines, and
-  `max_line_chars` (a line wholly inside a block is never reported). It does not apply to `path_limits`.
-  The split is deliberate: a single-file limit is the author's budget, and a block a tool writes into
-  the file is not the author's; `path_limits` model what the agent actually reads, block included.
-- Exact semantics: files are read as UTF-8 without newline translation, so bytes are the bytes on disk
-  (a CRLF counts two) minus the blocks' raw bytes, the same unit `path_limits` uses; lines are counted
-  on the text outside the blocks; line length is in characters; a limit is exceeded when
-  `measured > limit` (equal passes); a finding's line number is the line on disk, where an annotation
-  points. A contract test compares R1 with the checker it replaced and lists the deliberate differences
-  (CRLF bytes, line numbers after a block; docs/adr/0004).
+  characters, so a CLAUDE.md under 200 lines with long or non-ASCII lines passes (docs/rules.md, R1b).
+  R1a at `error` with no limits, R1d `off`. Every default error must point to such a hard limit
+  (docs/adr/0003).
+- Old ids, aliases and keys (`R1`, `size`, `bytes_level`, `lines_level`, `path_limits`,
+  `max_line_chars`, the old `max_bytes` tier table) fail the configuration with a message naming what
+  replaces them.
+- `[shared.size] excluded_blocks`: marker pairs; the text from a begin marker through the end marker
+  (and one trailing LF, CRLF or CR) does not count toward R1a, R1b or R1d (a line wholly inside a block
+  is never reported). It does not apply to R1c. The split is deliberate: a single-file limit is the
+  author's budget, and a block a tool writes into the file is not the author's; R1c models what the
+  agent actually reads, block included.
+- Exact semantics: the engine reads each file once as bytes; R1a to R1d see the text without newline
+  translation, so bytes are the bytes on disk (a CRLF counts two) minus the blocks' raw bytes, the same
+  unit R1c uses; lines are counted on the text outside the blocks; line length is in characters; a
+  limit is exceeded when `measured > limit` (equal passes); a finding's line number is the line on
+  disk, where an annotation points. Other rules see the text with newlines normalized. A contract test
+  compares R1a to R1d with the checker they replaced and lists the deliberate differences (CRLF bytes,
+  line numbers after a block; docs/adr/0004).
 
 ## Rules R2 to R6 and C1
 
-The default preset runs only objective checks: R2, R3a, R3c and R5 (same-name ancestor pairs) at
-`warn`; R3b, R4 and R6 guess and C1 checks a convention, so they are `off` and `preset:strict` turns
-them on at `warn`, with R5 on any pair (docs/adr/0003). New rules enter at `warn` (see Versioning);
+The default preset runs only objective checks: R2, R3a, R3c and R5a (same-name ancestor pairs) at
+`warn`; R3b, R4a, R4b, R5b and R6 guess and C1 checks a convention, so they are `off` and
+`preset:strict` turns them on at `warn`, with R5a and R5b on any pair (docs/adr/0003). New rules enter at `warn` (see Versioning);
 the severity named below is what a repository gets with `level = "error"`. Each rule reads its parameters from the config, and the
 preset documents every key. Cross-file rules (`check_repo`) always see the full tracked set.
 Fenced code blocks and HTML comments are ignored by every text rule.
@@ -131,24 +139,28 @@ Fenced code blocks and HTML comments are ignored by every text rule.
   `*` matched); each `ref_pattern` match must match a numbered heading (`heading_pattern`; a heading
   2.1 also makes section 2 valid). Skipped: references qualified by an ASCII word other than
   `plain_words` (`other-doc §3`) and text matched by `ignore_before`. Empty `specs` means inactive.
-- R4 rot: dates (ISO) and issue references at the rule level; `narrative_words` at `narrative_level`.
-  A match inside a token that has a path separator, a file extension or a date-prefixed slug is a name,
-  not a date.
-- R5 duplicates: lines of at least `min_chars` characters, compared after collapsing whitespace and
-  removing a list marker; headings and table rules are skipped. Same line in a file and in an ancestor
-  file is reported on the descendant at the rule level. `ancestor_pairs = "same-name"` (default) counts
-  only a file with the same name in a strict ancestor directory, the pair one agent loads together
-  (Codex reads AGENTS.md from the root down to the working directory, Claude Code CLAUDE.md from the
-  working directory up); `any` (strict) also counts different names and two files in one directory.
-  Every other pair is a sibling pair, reported at `sibling_level` (default `off`, strict `warn`). Exact matches only. Always the full set (a partial view
-  would pass locally and fail in CI).
+- R4a dated references (`dated-refs`): dates (ISO, `date_patterns`) and issue references
+  (`issue_patterns`). R4b narrative words (`narrative-words`): `narrative_words`. A match inside a
+  token that has a path separator, a file extension or a date-prefixed slug is a name, not a date
+  (`ignore_token_patterns`, R4a).
+- R5a and R5b duplicates (`ancestor-duplicates`, `sibling-duplicates`): lines of at least `min_chars`
+  characters, compared after collapsing whitespace and removing a list marker; headings and table
+  rules are skipped. Both read `[shared.duplicates]` (`ancestor_pairs`, `min_chars`,
+  `ignore_headings`, `ignore_patterns`). The same line in a file and in an ancestor file is R5a,
+  reported on the descendant. `ancestor_pairs = "same-name"` (default) counts only a file with the same
+  name in a strict ancestor directory, the pair one agent loads together (Codex reads AGENTS.md from
+  the root down to the working directory, Claude Code CLAUDE.md from the working directory up); `any`
+  (strict) also counts different names and two files in one directory. Every other pair is R5b
+  (default `off`, strict `warn`). Files are grouped once: a line that matches an ancestor is not also
+  reported as a sibling duplicate, even with R5a `off`. Exact matches only. Always the full set (a
+  partial view would pass locally and fail in CI).
 - R6 constants: candidate patterns for values copied from code; findings are always warnings.
 - C1 CLAUDE.md: any tracked file named `CLAUDE.md`, whatever `discover.globs` says. `import-only`:
   exactly one non-blank line, `import_line`, and an AGENTS.md next to it; a symlink to that AGENTS.md
   counts as the import. `forbid`: must not exist (a symlink included).
 
-A finding carries its own level and the rule level caps it: a rule at `warn` never produces an error,
-and a rule at `error` can still report some findings (R4 narrative words, R5 siblings, R6) as warnings.
+Each rule id has one level, and every finding of that id is reported at it (docs/adr/0005); R6 is
+the exception, its findings are always warnings.
 
 ## Overrides
 
@@ -158,7 +170,7 @@ Each entry: `paths` (globs), `rules` (rule id or alias -> `warn` or `off`), `rea
   configuration. For one file and one rule the lowest of the rule level and every matching override
   applies, so entry order does not matter. `E0` and `allowlist` cannot be overridden.
 - It applies to the findings reported on the files it matches; those files stay in the input of
-  cross-file rules (`path_limits` still counts them, R5 still compares them), so a finding on a file
+  cross-file rules (R1c still counts them, R5a and R5b still compare them), so a finding on a file
   outside the paths is still reported.
 - Overrides run before the allowlist: an allowlist entry for a finding an override drops is no longer
   needed.
@@ -172,12 +184,16 @@ Each entry: `paths` (globs), `rules` (rule id or alias -> `warn` or `off`), `rea
 
 ## Allowlist
 
-Each entry: `rule`, `path`, `reason`, `expires`.
+Each entry: `rule`, `path`, `count`, `reason`, `expires` (docs/adr/0005).
 
-- A live entry suppresses that rule's findings in that file.
-- Expired (`expires` before today): error, and the finding is not suppressed. An entry that
+- `count` (required, an integer of at least 1) is the number of findings of that rule in that file the
+  entry accepts. With n findings of that rule in that file after overrides:
+  - n = count: a live entry suppresses all of them.
+  - n > count: none is suppressed, and an error reports that the entry expected `count` and found n.
+  - 0 < n < count: all are suppressed, and an error asks to lower `count` to n.
+  - n = 0 (the file does not violate the rule, or is not an analyzed file): error, no longer needed.
+- Expired (`expires` before today): error, and the findings are not suppressed. An entry that
   expires today is still live.
-- No longer needed (the file does not violate the rule, or is not an analyzed file): error.
 - Within `warn_days` (default 14) of expiry: warning "expires in N days".
 - `max_days` (default 90): an `expires` later than today plus `max_days` fails the configuration.
 - `max_entries` (default 10): more entries fail the configuration.

@@ -14,10 +14,10 @@ With no config it runs only checks whose findings are facts. From a demo reposit
 
 ```text
 $ uvx agentfile-lint
-AGENTS.md: warning: R1: file is 211 lines, limit 200
+AGENTS.md: warning: R1b: file is 211 lines, limit 200
 AGENTS.md:9: warning: R3a: test `test_login_redirects` is not defined in any searched test file
-services/api/AGENTS.md: error: R1: file and its ancestors (AGENTS.md) total 34618 bytes, limit 32768
-services/api/AGENTS.md:3: warning: R5: line repeats AGENTS.md:8 ('Never edit generated files under `gen/`; change the schem...'); keep it in the ancestor only
+services/api/AGENTS.md: error: R1c: file and its ancestors (AGENTS.md) total 34618 bytes, limit 32768
+services/api/AGENTS.md:3: warning: R5a: line repeats AGENTS.md:8 ('Never edit generated files under `gen/`; change the schem...'); keep it in the ancestor only
 $ echo $?
 1
 ```
@@ -30,30 +30,35 @@ Codex stops reading `AGENTS.md` files on a path once they total 32 KiB (its defa
 ```text
 $ printf 'extends = ["preset:strict"]\n' > .agentfile-lint.toml
 $ uvx agentfile-lint
-AGENTS.md: warning: R1: file is 211 lines, limit 200
+AGENTS.md: warning: R1b: file is 211 lines, limit 200
 AGENTS.md:9: warning: R3a: test `test_login_redirects` is not defined in any searched test file
 CLAUDE.md: warning: C1: CLAUDE.md must contain only the line '@AGENTS.md'
-services/api/AGENTS.md: error: R1: file and its ancestors (AGENTS.md) total 34618 bytes, limit 32768
-services/api/AGENTS.md:3: warning: R5: line repeats AGENTS.md:8 ('Never edit generated files under `gen/`; change the schem...'); keep it in the ancestor only
+services/api/AGENTS.md: error: R1c: file and its ancestors (AGENTS.md) total 34618 bytes, limit 32768
+services/api/AGENTS.md:3: warning: R5a: line repeats AGENTS.md:8 ('Never edit generated files under `gen/`; change the schem...'); keep it in the ancestor only
 services/api/AGENTS.md:4: warning: R3b: path `src/legacy/router.py` not found from this file's directory, its ancestors, the repo root or base_dirs
-services/api/AGENTS.md:5: warning: R4: narrative word 'currently'; describe the current rule, not its history
+services/api/AGENTS.md:5: warning: R4b: narrative word 'currently'; describe the current rule, not its history
 services/api/AGENTS.md:5: warning: R6: possible copied constant '`MAX_RETRIES = 5`'; point to the code instead of repeating the value
 ```
 
 | Rule | Default | `preset:strict` | What it checks |
 |---|---|---|---|
-| `R1` | error | error | size: `AGENTS.md` files on one path over 32 KiB in total (error), `AGENTS.md` or `CLAUDE.md` over 200 lines (warn); your own byte, line and line-length limits by glob |
+| `R1a` | error | error | bytes per file: your own limits by glob (none by default) |
+| `R1b` | warn | warn | lines per file: `AGENTS.md` or `CLAUDE.md` over 200 lines; your own limits by glob |
+| `R1c` | error | error | `AGENTS.md` files on one path over 32 KiB in total |
+| `R1d` | off | off | characters per line (`max_chars`) |
 | `R2` | warn | warn | file shape: required section headings in order, optional title, one-line purpose, bullet-only sections (needs config) |
 | `R3a` | warn | warn | a test name in backticks is defined in a tracked test file |
 | `R3b` | off | warn | a path in backticks exists (heuristic) |
 | `R3c` | warn | warn | a `§N` reference matches a numbered heading in the mapped spec document (needs config) |
-| `R4` | off | warn | dates, issue numbers and narrative words such as "currently" (heuristic) |
-| `R5` | warn | warn | identical lines in a same-name file of an ancestor directory; strict: any file in an ancestor or the same directory, and sibling files |
+| `R4a` | off | warn | dates and issue numbers (heuristic) |
+| `R4b` | off | warn | narrative words such as "currently" (heuristic) |
+| `R5a` | warn | warn | identical lines in a same-name file of an ancestor directory; strict: any file in an ancestor or the same directory |
+| `R5b` | off | warn | identical lines in sibling files |
 | `R6` | off | warn | candidates for constants copied from code (heuristic, always a warning) |
 | `C1` | off | warn | `CLAUDE.md` is only the line `@AGENTS.md` (`import-only`) or absent (`forbid`) |
-| `allowlist` | error | error | exceptions: expired or no-longer-needed allowlist entries fail, entries warn before they expire; an override glob that matches no file warns |
+| `allowlist` | error | error | exceptions: expired, no-longer-needed or miscounted (`count` above or below the findings) allowlist entries fail, entries warn before they expire; an override glob that matches no file warns |
 
-Every rule except `R1` ships at `warn` or `off`; raise a rule to `error` in your own config once it is
+Every rule except `R1a` and `R1c` ships at `warn` or `off`; raise a rule to `error` in your own config once it is
 clean. Why each rule exists, where its default comes from and its measured false-positive rate:
 [`docs/rules.md`](docs/rules.md). What it found on 22 popular public repositories with no config, and
 how that changed from 0.4.0: [`docs/field-report.md`](docs/field-report.md).
@@ -69,7 +74,7 @@ globs = ["AGENTS.md", "**/AGENTS.md", "CLAUDE.md", "**/CLAUDE.md",
 ```
 
 - The list replaces the default list, so repeat the four `AGENTS.md` / `CLAUDE.md` globs.
-- With `preset:strict`, R5 compares files of different names too, so a `GEMINI.md` that copies the
+- With `preset:strict`, R5a compares files of different names too, so a `GEMINI.md` that copies the
   `AGENTS.md` next to it is reported line by line. The default compares only same-name files.
 
 ### Compared with similar tools
@@ -138,19 +143,19 @@ extends = ["preset:default"]        # default; other entries are paths relative 
 [discover]
 globs = ["AGENTS.md", "**/AGENTS.md"]
 
-[rules.R1]
-level = "error"                     # error | warn | off
-max_line_chars = 500                # optional; omitted, line length is not checked
+[shared.size]                       # parameters R1a, R1b and R1d share
 excluded_blocks = [{ begin = "<!-- BEGIN:x -->", end = "<!-- END:x -->" }]
 
-# First matching glob wins; a file matching no entry has no size limit.
-[[rules.R1.limits]]
+[rules.R1d]
+level = "error"                     # error | warn | off; each rule id has one level
+max_chars = 500                     # required unless R1d is off
+
+# First matching glob wins; a file matching no entry has no limit.
+[[rules.R1a.limits]]
 glob = "AGENTS.md"
 max_bytes = 12000
-max_lines = 200                     # optional; either or both
-lines_level = "warn"                # optional, also bytes_level; default: the rule level
 
-[[rules.R1.limits]]
+[[rules.R1a.limits]]
 glob = "**/AGENTS.md"
 max_bytes = 6000
 
@@ -158,15 +163,16 @@ max_bytes = 6000
 max_days = 90
 
 [[allowlist.entries]]
-rule = "R1"
+rule = "R1a"
 path = "docs/AGENTS.md"
+count = 1  # findings of R1a in that file; more or fewer fail
 reason = "split planned in the tracker"
 expires = 2026-12-31
 
 # Permanent path scope: translated copies duplicate the root file on purpose.
 [[overrides]]
 paths = ["docs/*/AGENTS.md"]
-rules = { duplicates = "off" }      # rule id or alias -> "warn" or "off"; never raises a level
+rules = { ancestor-duplicates = "off" }  # rule id or alias -> "warn" or "off"; never raises a level
 reason = "translations of the root AGENTS.md"
 ```
 

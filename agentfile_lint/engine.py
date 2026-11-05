@@ -9,15 +9,11 @@ from . import allowlist, discover, overrides
 from .config import Config
 from .context import Context
 from .finding import INPUT_RULE, Finding
-from .rules import RULES
+from .rules import MODULES
 
 
 def _level(rule_level: str, finding: Finding) -> str:
-    """The rule level caps a finding: a rule at `warn` never produces an error.
-
-    A rule may emit a finding at `warn` on its own (R4 narrative words, R5 siblings, R6); those stay
-    warnings when the rule is at `error`.
-    """
+    """The rule level caps a finding: a rule at `warn` never produces an error. R6 emits warnings only."""
     return "warn" if rule_level == "warn" or finding.level == "warn" else "error"
 
 
@@ -26,25 +22,25 @@ def analyze(root: Path, config: Config, today: datetime.date, warn_as_error: boo
     alias = discover.aliases(root, paths)
     paths = [p for p in paths if p not in alias]
     findings: list[Finding] = []
-    texts: dict[str, str] = {}
+    raw: dict[str, str] = {}
     for path in paths:
         try:
-            texts[path] = (root / path).read_text(encoding="utf-8")  # text mode; R1 rereads the raw bytes (docs/adr/0004)
+            raw[path] = (root / path).read_bytes().decode("utf-8")  # read once, as stored (docs/design.md, R1a to R1d)
         except UnicodeDecodeError:
             findings.append(Finding(path, 0, INPUT_RULE, "file is not valid UTF-8"))
-    ctx = Context(root, discover.tracked_files(root), texts)
-    for rule_id, module in RULES.items():
-        params = config.rules[rule_id]
-        level = params["level"]
-        if level == "off":
+    ctx = Context(root, discover.tracked_files(root), raw)
+    for module in MODULES:
+        levels = {rule_id: config.rules[rule_id]["level"] for rule_id, _, _ in module.CHECKS}
+        if all(level == "off" for level in levels.values()):
             continue
-        raw: list[Finding] = []
+        params = config.params[module.__name__]
+        found: list[Finding] = []
         if hasattr(module, "check"):
-            for path, text in texts.items():
-                raw.extend(module.check(path, text, params))
+            for path, text in ctx.files.items():
+                found.extend(module.check(path, text, params, levels))
         if hasattr(module, "check_repo"):
-            raw.extend(module.check_repo(ctx, params))
-        findings.extend(replace(f, level=_level(level, f)) for f in raw)
+            found.extend(module.check_repo(ctx, params, levels))
+        findings.extend(replace(f, level=_level(levels[f.rule], f)) for f in found if levels[f.rule] != "off")
     # Overrides before the allowlist: an entry for a path an override silences is no longer needed.
     findings = overrides.apply(findings, config.overrides)
     findings = allowlist.apply(findings, config.entries, config.allowlist, set(paths), today)

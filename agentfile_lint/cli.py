@@ -23,7 +23,7 @@ from . import config as config_mod
 from . import discover, engine
 from .errors import ConfigError
 from .finding import INPUT_RULE, RENDERERS, dump_json
-from .rules import RULES
+from .rules import DESCRIPTIONS, NAMES, RULES
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -116,9 +116,9 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     if args.list_rules:
-        for rule_id, module in RULES.items():
-            print(f"{rule_id}  {cfg.rules[rule_id]['level']:<5}  {module.NAME}: {module.DESCRIPTION}")
-        print("allowlist  error  expired or no-longer-needed allowlist entries; warns before expiry and on an override glob that matches no file (always on)")
+        for rule_id in RULES:
+            print(f"{rule_id}  {cfg.rules[rule_id]['level']:<5}  {NAMES[rule_id]}: {DESCRIPTIONS[rule_id]}")
+        print("allowlist  error  expired, no-longer-needed or miscounted allowlist entries; warns before expiry and on an override glob that matches no file (always on)")
         print(f"{INPUT_RULE}  error  instruction file is not valid UTF-8; only an allowlist entry can exempt it (always on)")
         return 0
 
