@@ -5,6 +5,8 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-05
+
 ### Changed (breaking)
 
 - One rule id is one check with one level (docs/adr/0005). R1 is split into `R1a` per-file bytes

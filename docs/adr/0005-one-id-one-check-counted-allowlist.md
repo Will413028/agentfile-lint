@@ -1,8 +1,7 @@
 # ADR 0005: One rule id per check, and allowlist entries that count
 
 Status: accepted. Amends decision 4 of ADR 0004 ("existing ids are not renamed") and decision 3 of
-ADR 0001 (the keys of an allowlist entry). Planned for 0.7.0; until then the code on `dev` changes one
-part at a time.
+ADR 0001 (the keys of an allowlist entry). Implemented in 0.7.0.
 
 ## Context
 
