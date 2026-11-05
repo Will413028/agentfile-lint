@@ -9,7 +9,9 @@ locally and in CI does.
 
 ## Goals
 
-- One rule file (TOML) plus a thin Python runner; no third-party dependencies at run time.
+- One rule file (TOML) plus a thin Python runner; nothing to install at run time. The only
+  third-party code is PyYAML's pure-Python part, vendored unchanged in `agentfile_lint/_yaml/` for
+  frontmatter and used only through `frontmatter.py` with `SafeLoader` (docs/adr/0007).
 - The local hook and CI run the same program, the same rules, the same version.
 - Three levels per rule: `error` (blocks), `warn` (prints), `off`.
 - Debt exceptions are time-boxed: every allowlist entry has a reason and an expiry date, and the
@@ -332,7 +334,7 @@ commit and a SHA-256 for every file. Options: `--ref-tag` / `--ref-commit` (defa
 and HEAD of the source checkout, else `untagged`), `--force` (replace a non-empty target).
 
 - Run it from the repository root: `python3 <dir>/agentfile-lint.py` (Python >= 3.11, standard
-  library only, no network). Its output and exit codes equal `python3 -m agentfile_lint`.
+  library plus the vendored PyYAML, no network). Its output and exit codes equal `python3 -m agentfile_lint`.
 - The output is reproducible: same source and same two upstream values give a byte-identical tree
   (sorted order, fixed newlines, no timestamps, no machine paths or user names).
 - `python3 <dir>/verify.py` recomputes the hashes and fails (exit 1, naming the file) on a

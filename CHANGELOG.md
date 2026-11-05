@@ -5,6 +5,13 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `agentfile_lint/_yaml/`: the pure-Python part of PyYAML 6.0.3 (MIT), vendored unchanged with its
+  `LICENSE` and a `PROVENANCE` record, and `agentfile_lint/frontmatter.py`, which parses YAML
+  frontmatter with it (`SafeLoader` only) for the coming `SKILL.md` rules. Nothing new to install;
+  `dependencies` stays empty. The vendored copy written by `vendor` now includes `_yaml/` (docs/adr/0007).
+
 ## [0.8.0] - 2026-11-05
 
 ### Changed (breaking)
