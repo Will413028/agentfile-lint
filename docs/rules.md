@@ -70,7 +70,8 @@ file where the total first exceeds the limit); `AGENTS.md` and `CLAUDE.md` over 
 (R1b). Both are limits an agent's documentation states; the first one drops text, the second is
 guidance. Per-file byte limits (R1a `limits`) and a per-line character limit (R1d `max_chars`) are yours
 to add. Each id has its own level, so an allowlist entry for the 200-line warning does not hide the
-32 KiB error on the same file.
+32 KiB error on the same file. Lines are counted, and every rule's line numbers given, by LF, CRLF and a lone
+CR only, as `grep -n` counts them; form feed and U+2028 do not end a line.
 
 Blind spot: the default counts no characters. A `CLAUDE.md` under 200 lines with long or non-ASCII
 lines passes even when Claude Code would cut it, and the 32 KiB path limit covers only `AGENTS.md`. To

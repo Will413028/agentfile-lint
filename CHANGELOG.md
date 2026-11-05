@@ -5,6 +5,24 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed (breaking)
+
+- Lines are only ended by LF, CRLF or a lone CR, the way `grep -n` and editors count them. R1b's line
+  count and the line numbers every rule reports no longer treat form feed, U+2028 or the other
+  Unicode line breaks as line ends; a file with those characters may now report fewer lines and lower
+  line numbers. Files without them are unchanged.
+
+### Changed
+
+- `config --format json` prints the effective table each rule module returns from validation, the same
+  `Config.rules` the engine reads levels from, so a defaulted key would show up for every id. The output
+  of the default and strict presets is unchanged (a test compares it with the 0.7.0 output).
+- `check-pins` numbers lines the same way.
+
+### Fixed
+
+- R1b no longer loses a line when a lone CR ends the line before an excluded block and an LF follows it.
+
 ## [0.7.0] - 2026-11-05
 
 ### Changed (breaking)

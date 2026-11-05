@@ -8,6 +8,16 @@ from typing import Iterator
 _FENCE = re.compile(r"\s*(`{3,}|~{3,})")
 _COMMENT = re.compile(r"<!--.*?-->")
 SPAN = re.compile(r"`([^`\n]+)`")
+LINE_END = re.compile(r"\r\n|\r|\n")
+
+
+def split_lines(text: str) -> list[str]:
+    """Lines as `grep -n` and editors count them: only LF, CRLF and a lone CR end a line (never form
+    feed, U+2028 or the other breaks `str.splitlines` knows); a final line ending adds no empty line."""
+    lines = LINE_END.split(text)
+    if lines[-1] == "":
+        lines.pop()
+    return lines
 
 
 def parent_dirs(path: str) -> list[str]:
@@ -24,7 +34,7 @@ def prose_lines(text: str) -> Iterator[tuple[int, str]]:
     """(1-based line number, line) for lines outside fenced code blocks; HTML comments are cut out."""
     fence: str | None = None
     in_comment = False
-    for number, raw in enumerate(text.splitlines(), start=1):
+    for number, raw in enumerate(split_lines(text), start=1):
         line = raw
         if in_comment:
             end = line.find("-->")

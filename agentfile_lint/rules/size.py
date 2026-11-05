@@ -15,7 +15,7 @@ import re
 from typing import Any
 
 from ..context import Context
-from ._text import parent_dirs
+from ._text import LINE_END, parent_dirs, split_lines
 from ..discover import glob_to_regex
 from ..errors import ConfigError, check_keys, expect_int, expect_str, expect_table_list, require_keys
 from ..finding import Finding
@@ -53,7 +53,7 @@ _TABLE_REMOVED = {
 }
 
 
-def validate(shared: dict[str, Any], tables: dict[str, dict[str, Any]]) -> dict[str, Any]:
+def validate(shared: dict[str, Any], tables: dict[str, dict[str, Any]]) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
     require_keys(shared, ["excluded_blocks"], "shared.size")
     blocks = shared["excluded_blocks"]
     if not isinstance(blocks, list):
@@ -83,7 +83,9 @@ def validate(shared: dict[str, Any], tables: dict[str, dict[str, Any]]) -> dict[
     if table["level"] != "off":
         require_keys(table, ["max_chars"], "rules.R1d")
     params["R1d"] = expect_int(table["max_chars"], "rules.R1d.max_chars") if "max_chars" in table else None
-    return params
+    effective: dict[str, dict[str, Any]] = {rule_id: {"limits": params[rule_id]} for rule_id in _LIMIT_KEY}
+    effective["R1d"] = {} if params["R1d"] is None else {"max_chars": params["R1d"]}
+    return params, effective
 
 
 def _block_patterns(params: dict[str, Any]) -> list[re.Pattern[str]]:
@@ -161,7 +163,9 @@ def _check_file(path: str, raw: str, params: dict[str, Any], levels: dict[str, s
     if max_bytes is not None and size > max_bytes:
         found.append(Finding(path, 0, "R1a", f"file is {size} bytes, limit {max_bytes}"))
     max_lines = limit_for(path, params["R1b"]).get("max_lines")
-    lines = len(body.splitlines())
+    # Each kept piece's endings become LF before joining, so a lone CR before a block and the LF after it
+    # never merge into one CRLF and hide a line.
+    lines = len(split_lines("".join(LINE_END.sub("\n", raw[s:e]) for s, e in _complement(spans, len(raw)))))
     if max_lines is not None and lines > max_lines:
         found.append(Finding(path, 0, "R1b", f"file is {lines} lines, limit {max_lines}"))
     max_chars = params["R1d"]

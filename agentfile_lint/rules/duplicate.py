@@ -36,17 +36,18 @@ _REMOVED = {
 }
 
 
-def validate(shared: dict[str, Any], tables: dict[str, dict[str, Any]]) -> dict[str, Any]:
+def validate(shared: dict[str, Any], tables: dict[str, dict[str, Any]]) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
     for rule_id, table in tables.items():
         check_keys(table, {"level"}, f"rules.{rule_id}", _REMOVED)
     where = "shared.duplicates"
     require_keys(shared, sorted(_KEYS), where)
-    return {
+    params = {
         "ancestor_pairs": _expect_pairs(shared["ancestor_pairs"], f"{where}.ancestor_pairs"),
         "min_chars": expect_int(shared["min_chars"], f"{where}.min_chars"),
         "ignore_headings": expect_bool(shared["ignore_headings"], f"{where}.ignore_headings"),
         "ignore_patterns": expect_regex_list(shared["ignore_patterns"], f"{where}.ignore_patterns"),
     }
+    return params, {rule_id: {} for rule_id in tables}  # the parameters are all in [shared.duplicates]
 
 
 def _expect_pairs(value: Any, where: str) -> str:

@@ -238,12 +238,11 @@ def _validate(raw: dict[str, Any], today: datetime.date) -> Config:
                 raise ConfigError(f"rules.{rule_id}.level: expected one of {', '.join(LEVELS)}")
         group = module.SHARED[0] if hasattr(module, "SHARED") else None
         tables = {rule_id: rules_raw[rule_id] for rule_id in ids}
-        params[module.__name__] = module.validate(shared_raw.get(group), tables)
+        params[module.__name__], effective = module.validate(shared_raw.get(group), tables)
         for rule_id in ids:
-            # `config --format json` shows effective values (defaults filled in). A one-id module's
-            # params are its effective table; the tables of a module with several ids have no defaulted
-            # keys (all required, or optional without a default), so as merged they are effective.
-            rules[rule_id] = params[module.__name__] if len(ids) == 1 else tables[rule_id]
+            # The one source of each id's effective table (defaults filled in), read by the engine for
+            # the level and printed by `config --format json`.
+            rules[rule_id] = {**effective[rule_id], "level": tables[rule_id]["level"]}
 
     # E0 has no `[rules]` table (it cannot be turned off), but an allowlist entry may name it.
     entries = allowlist.parse(al.get("entries", []), settings, set(RULES) | {INPUT_RULE}, today)

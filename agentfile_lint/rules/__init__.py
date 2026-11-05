@@ -5,7 +5,9 @@ Each module exposes:
   level; a finding carries the id of the check that produced it.
 - `SHARED` (optional): (group, keys), the `[shared.<group>]` table its ids share.
 - `validate(shared, tables)`: `shared` is the validated-for-keys `[shared.<group>]` table (or None),
-  `tables` maps each of its ids to its `[rules.<id>]` table; returns the module's params.
+  `tables` maps each of its ids to its `[rules.<id>]` table; returns (params, effective): the module's
+  params and, for each of its ids, its effective `[rules.<id>]` table (defaults filled in; `level`
+  is set from the merged table), which `Config.rules` and `config --format json` show.
 - `check(path, text, params, levels)` (one file, newlines normalized) and/or
   `check_repo(ctx, params, levels)` (the whole tracked set); `levels` maps each of its ids to its level.
   The engine runs a module once unless all its ids are off and drops findings of an id that is off.

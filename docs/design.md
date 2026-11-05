@@ -107,7 +107,11 @@ per-file lines (`file-lines`), `R1c` combined bytes on a path (`path-bytes`) and
   translation, so bytes are the bytes on disk (a CRLF counts two) minus the blocks' raw bytes, the same
   unit R1c uses; lines are counted on the text outside the blocks; line length is in characters; a
   limit is exceeded when `measured > limit` (equal passes); a finding's line number is the line on
-  disk, where an annotation points. Other rules see the text with newlines normalized. A contract test
+  disk, where an annotation points. Other rules see the text with newlines normalized.
+- One line definition for every rule: only LF, CRLF and a lone CR end a line (`rules/_text.py`
+  `split_lines`), as `grep -n` and editors count them. Form feed, U+2028 and the other breaks
+  `str.splitlines` knows are characters inside a line, for R1b's count and for every reported line
+  number. A contract test
   compares R1a to R1d with the checker they replaced and lists the deliberate differences (CRLF bytes,
   line numbers after a block; docs/adr/0004).
 
