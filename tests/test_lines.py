@@ -54,7 +54,11 @@ class ConfigJsonTest(unittest.TestCase):
                 (root / "p.toml").write_text(f'extends = "preset:{preset}"\n')
                 r = helpers.run_new(root, "config", "--format", "json", "--config", "p.toml")
                 self.assertEqual(r.returncode, 0, r.stderr)
-                self.assertEqual(r.stdout, (SNAPSHOTS / f"{preset}.json").read_text())
+                # 0.8.0 only adds keys: with them removed, the output is the 0.7.0 snapshot verbatim.
+                doc = json.loads(r.stdout)
+                self.assertEqual(doc["discover"].pop("extend_globs"), [])
+                self.assertEqual(doc["shared"]["duplicates"].pop("exclude"), [])
+                self.assertEqual(json.dumps(doc, sort_keys=True, indent=2, ensure_ascii=False) + "\n", (SNAPSHOTS / f"{preset}.json").read_text())
 
     def test_prints_the_effective_table_of_a_multi_id_module(self):
         # A defaulted key a module fills in shows up, though no config file writes it.

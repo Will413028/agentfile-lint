@@ -65,15 +65,14 @@ how that changed from 0.4.0: [`docs/field-report.md`](docs/field-report.md).
 
 ### Other instruction files
 
-The default checks `AGENTS.md` and `CLAUDE.md` only. To add others, list them in `[discover] globs`:
+The default checks `AGENTS.md` and `CLAUDE.md` only. To add others, list them in `[discover] extend_globs`:
 
 ```toml
 [discover]
-globs = ["AGENTS.md", "**/AGENTS.md", "CLAUDE.md", "**/CLAUDE.md",
-         "GEMINI.md", "**/GEMINI.md", ".github/copilot-instructions.md"]
+extend_globs = ["GEMINI.md", "**/GEMINI.md", ".github/copilot-instructions.md"]
 ```
 
-- The list replaces the default list, so repeat the four `AGENTS.md` / `CLAUDE.md` globs.
+- `extend_globs` adds to the default list; `globs` replaces it. `extend_globs` from `extends` files add up.
 - With `preset:strict`, R5a compares files of different names too, so a `GEMINI.md` that copies the
   `AGENTS.md` next to it is reported line by line. The default compares only same-name files.
 
@@ -87,7 +86,7 @@ documented" means the documentation does not say, not that the feature is missin
 | Runs on | Python 3.11+, standard library only | Rust binary (npm, brew, pip, cargo) | Node (`npx`), no runtime dependencies | Node 18+ (`npx`) |
 | Files | `AGENTS.md`, `CLAUDE.md`; others by glob | `CLAUDE.md`, `AGENTS.md`, `SKILL.md`, hooks, MCP, Cursor, Copilot, more | context files of 16 tools, MCP config | `CLAUDE.md`, `AGENTS.md`, `SKILL.md`, Cursor, Copilot, more |
 | Shared config | `extends` presets and files | `extend` base files | not documented | `extends` of the built-in preset |
-| Exceptions | allowlist entries need a reason and an expiry date, expired or unneeded entries fail; path overrides only lower a level and need a reason | disabled rules, per-file overrides, inline comments | ignored rules with an optional reason; unused ones reported | ignored paths |
+| Exceptions | allowlist entries need a reason and an expiry date, expired or unneeded entries fail; path overrides need a reason and raise a level only with `raise = true` | disabled rules, per-file overrides, inline comments | ignored rules with an optional reason; unused ones reported | ignored paths |
 | Vendored copy | reproducible directory with a hash check | not documented | not documented | not documented |
 | References checked | test names, `§N` spec sections; paths with `preset:strict` | import paths, commands, referenced files | paths, commands (against `package.json`, `Makefile`) | file references, imports |
 | Duplicates between files | identical lines in a file and its ancestors | not documented | duplicate content across files | duplicate content; across files not documented |
@@ -172,14 +171,22 @@ expires = 2026-12-31
 # Permanent path scope: translated copies duplicate the root file on purpose.
 [[overrides]]
 paths = ["docs/*/AGENTS.md"]
-rules = { ancestor-duplicates = "off" }  # rule id or alias -> "warn" or "off"; never raises a level
+rules = { ancestor-duplicates = "off" }  # rule id or alias -> "warn" or "off"
 reason = "translations of the root AGENTS.md"
+
+# Raising takes `raise = true`: here R5b, off by default, is a warning under services/.
+[[overrides]]
+paths = ["services/**"]
+rules = { R5b = "warn" }                 # with raise = true: "error" or "warn"
+raise = true
+reason = "service guides must not copy each other"
 ```
 
 The allowlist is for debt with an end date; `[[overrides]]` is for paths that are meant to differ.
-An override only lowers a rule's level (the lowest of the rule and every matching override wins), and
-entries from `extends` are added to the repository's own. A glob in your config that matches no
-instruction file is a warning.
+An override only lowers a rule's level unless it says `raise = true`; when entries that lower and
+entries that raise both match a file, lowering wins. Entries from `extends` are added to the
+repository's own; `[[overrides]] unset = ["docs/**"]` (with a `reason`) removes an inherited glob. A
+glob that matches no instruction file is a warning on the config file that wrote it.
 
 ## Install and wire up
 

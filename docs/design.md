@@ -39,16 +39,19 @@ effective config + git ls-files (full set) -> rules -> findings -> overrides -> 
   R5a and R5b) from one computation; parameters those ids share live in `[shared.<group>]`, the rest
   in `[rules.<id>]` (docs/adr/0005).
 - Merge: tables merge key by key (the child wins); every other value, lists included, is replaced.
-  The one exception is `[[overrides]]`: the lists concatenate, parents first, because replacing them
-  would silently drop the overrides of the config a file extends. A child therefore cannot undo an
-  inherited override, so the shipped presets carry none.
+  Two lists concatenate along the `extends` chain instead, parents first: `[[overrides]]`, because
+  replacing them would silently drop the overrides of the config a file extends (a child removes an
+  inherited glob with an `unset` entry, see Overrides), and `discover.extend_globs`, which adds to
+  `discover.globs` the way ruff's `extend-select` adds to `select` (a child that replaces `globs` keeps
+  every inherited `extend_globs`). The shipped presets carry no overrides: a path scope belongs to one
+  repository's layout.
 - Unknown keys, unknown rule ids and malformed allowlist entries fail the configuration (exit 2).
   A typo must not silently disable a check.
 
 ## File discovery
 
 Files are `git ls-files` entries matching `discover.globs` (default `AGENTS.md`, `**/AGENTS.md`,
-`CLAUDE.md`, `**/CLAUDE.md`), never a file ending in `.local.md`, skipping files deleted in the
+`CLAUDE.md`, `**/CLAUDE.md`) or `discover.extend_globs` (default none), never a file ending in `.local.md`, skipping files deleted in the
 working tree. Two discovered paths in the same directory that are the same file (for example
 `CLAUDE.md -> AGENTS.md`) are one file under two names, each loaded by a different agent: only the
 non-symlink path is analyzed (the first in sort order when all are symlinks), so no rule reports the
@@ -168,21 +171,29 @@ the exception, its findings are always warnings.
 
 ## Overrides
 
-Each entry: `paths` (globs), `rules` (rule id or alias -> `warn` or `off`), `reason` (docs/adr/0004).
+Each entry: `paths` (globs), `rules` (rule id or alias -> level), `reason`, optional `raise`
+(docs/adr/0004, docs/adr/0006).
 
-- An override changes levels only, never rule parameters, and only lowers: `error` fails the
-  configuration. For one file and one rule the lowest of the rule level and every matching override
-  applies, so entry order does not matter. `E0` and `allowlist` cannot be overridden.
+- An override changes levels only, never rule parameters. Without `raise` it only lowers (`warn` or
+  `off`; `error` fails the configuration). With `raise = true` it only raises (`error` or `warn`; `off`
+  fails), from `off` too: the rule then runs, and its findings on the other files stay at the rule level
+  (dropped when that is `off`). For one file and one rule: when a lowering entry matches, the lowest of
+  the rule level and the matching lowering entries applies, whatever raising entries match (lowering
+  wins); otherwise the highest of the rule level and the matching raising entries. Entry order does not
+  matter. `E0` and `allowlist` cannot be overridden.
+- An entry `{ unset = [globs], reason }` (no other keys) removes those globs from the overrides the
+  file inherits through `extends`; an inherited entry left with no glob is dropped. A glob that is in no
+  inherited entry fails the configuration. It does not touch the file's own entries.
 - It applies to the findings reported on the files it matches; those files stay in the input of
   cross-file rules (R1c still counts them, R5a and R5b still compare them), so a finding on a file
   outside the paths is still reported.
 - Overrides run before the allowlist: an allowlist entry for a finding an override drops is no longer
   needed.
-- Each glob of the config file the run loads directly (`.agentfile-lint.toml` or `--config`) must match
-  an analyzed instruction file; otherwise a warning (rule `allowlist`, whole file, on that config file:
-  repo-relative inside the repository, as given outside it, naming `overrides[i]` by its index in that
-  file). Entries reached through `extends` are not checked: a shared config serves repositories that do
-  not all have every path.
+- Each glob of an entry (after `unset`) must match an analyzed instruction file; otherwise a warning
+  (rule `allowlist`, whole file, on the config file that wrote the entry: repo-relative inside the
+  repository, as given outside it, naming `overrides[i]` by its index in that file). An entry reached
+  through `extends` says `(inherited through extends)` and points at `unset`: a shared config serves
+  repositories that do not all have every path, and each one removes what it does not have.
 - A same-directory alias (a `CLAUDE.md` symlink to `AGENTS.md`) is not analyzed, so an override names
   the target file; a glob that matches only the alias gets the stale warning.
 

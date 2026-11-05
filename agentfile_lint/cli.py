@@ -123,7 +123,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     findings = []
-    if not args.files or _relevant(args.files, root, cwd, cfg.globs):
+    if not args.files or _relevant(args.files, root, cwd, cfg.all_globs):
         findings = engine.analyze(root, cfg, today, args.warn_as_error)
     if hasattr(sys.stdout, "reconfigure"):  # findings quote file text; a cp1252 pipe must not crash
         sys.stdout.reconfigure(encoding="utf-8")

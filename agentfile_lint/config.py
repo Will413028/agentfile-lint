@@ -1,8 +1,10 @@
 """Configuration: shipped preset + optional repo config with `extends`; unknown keys fail.
 
 Merge rule: tables merge key by key (the child wins); every other value, lists included,
-is replaced as a whole. The one exception is `[[overrides]]`: lists concatenate (parents first), since
-replacing them would silently drop the overrides of the config a file extends.
+is replaced as a whole. Two lists concatenate along the `extends` chain instead (parents first):
+`[[overrides]]`, since replacing them would silently drop the overrides of the config a file extends
+(a file removes an inherited glob with an `unset` entry), and `discover.extend_globs`, which adds to
+`discover.globs` the way ruff's `extend-select` adds to `select`.
 """
 from __future__ import annotations
 
@@ -14,7 +16,9 @@ from pathlib import Path
 from typing import Any
 
 from . import allowlist, overrides as overrides_mod
-from .errors import LEVELS, ConfigError, check_keys, expect_int, expect_str, expect_str_list, expect_table_list
+from .errors import (
+    LEVELS, ConfigError, check_keys, expect_int, expect_str, expect_str_list, expect_table_list, require_keys,
+)
 from .finding import INPUT_RULE
 from .rules import ALIASES, MODULES, RETIRED, RULES, SHARED
 
@@ -50,7 +54,7 @@ def default_config_path(root: Path | None) -> Path | None:
 
 @dataclass
 class Config:
-    globs: list[str]
+    globs: list[str]  # `discover.globs` as merged (the child replaces the list)
     allowlist: allowlist.Settings
     entries: list[allowlist.Entry]
     rules: dict[str, dict[str, Any]]  # rule id -> its merged, validated `[rules.<id>]` table, including "level"
@@ -58,12 +62,18 @@ class Config:
     params: dict[str, Any] = field(default_factory=dict)  # rule module name -> what its validate() returned
     check_pins: dict[str, Any] = field(default_factory=lambda: dict(PIN_DEFAULTS))  # repo, files
     overrides: list[overrides_mod.Override] = field(default_factory=list)
+    extend_globs: list[str] = field(default_factory=list)  # `discover.extend_globs`, concatenated along `extends`
+
+    @property
+    def all_globs(self) -> list[str]:
+        """What discovery matches: `globs` then `extend_globs`, duplicates dropped."""
+        return list(dict.fromkeys(self.globs + self.extend_globs))
 
 
 def to_jsonable(cfg: "Config") -> dict[str, Any]:
     """The effective configuration as plain JSON data (dates as ISO strings)."""
     return {
-        "discover": {"globs": cfg.globs},
+        "discover": {"globs": cfg.globs, "extend_globs": cfg.extend_globs},
         "allowlist": {
             "max_days": cfg.allowlist.max_days,
             "max_entries": cfg.allowlist.max_entries,
@@ -75,7 +85,10 @@ def to_jsonable(cfg: "Config") -> dict[str, Any]:
         },
         "shared": cfg.shared,
         "rules": cfg.rules,
-        "overrides": [{"paths": list(o.paths), "rules": dict(o.rules), "reason": o.reason} for o in cfg.overrides],
+        "overrides": [
+            {"paths": list(o.paths), "rules": dict(o.rules), "reason": o.reason, **({"raise": True} if o.raise_ else {})}
+            for o in cfg.overrides
+        ],
         "check_pins": cfg.check_pins,
     }
 
@@ -125,18 +138,54 @@ def _load_raw(ref: str, base_dir: Path | None, seen: tuple[str, ...]) -> dict[st
     if not isinstance(extends, list) or not all(isinstance(e, str) for e in extends):
         raise ConfigError(f"{ref}: extends must be a list of strings")
     merged: dict[str, Any] = {}
-    inherited: list[tuple[Any, str | None, int]] = []
+    inherited: list[tuple[Any, str, int, bool]] = []
+    extend_globs: list[Any] = []
     for parent in extends:
         parent_raw = _load_raw(parent, base_dir, seen + (key,))
         inherited += parent_raw.pop("overrides")
+        extend_globs += parent_raw.pop("extend_globs")
         merged = _merge(merged, parent_raw)
+    if "extend_globs" in data:  # the merged chain carries it at the top level; a file writes it under [discover]
+        raise ConfigError(f"{ref}: extend_globs belongs in [discover]")
     own = _resolve_aliases({k: v for k, v in data.items() if k != "extends"}, ref)
     own_overrides = expect_table_list(own.pop("overrides", []), f"{ref}: overrides")
-    # Only the file this run loads directly is checked for stale globs.
+    discover = own.get("discover")
+    if isinstance(discover, dict) and "extend_globs" in discover:
+        extend_globs += expect_str_list(discover["extend_globs"], f"{ref}: discover.extend_globs", allow_empty=True)
+        own = {**own, "discover": {k: v for k, v in discover.items() if k != "extend_globs"}}
+    # The file this run loads directly; entries from the files it extends are "inherited".
     direct = not seen and not ref.startswith(PRESET_PREFIX)
     merged = _merge(merged, own)
-    merged["overrides"] = inherited + [(entry, ref, i, direct) for i, entry in enumerate(own_overrides)]
+    mine: list[tuple[Any, str, int, bool]] = []
+    for i, entry in enumerate(own_overrides):
+        if isinstance(entry, dict) and "unset" in entry:
+            inherited = _unset(entry, inherited, f"{ref}: overrides[{i}]")
+        else:
+            # As given for the file the run loads; resolved for an inherited one, whose ref is relative to
+            # the file that extends it, not to the working directory.
+            mine.append((entry, ref if direct else key, i, direct))
+    merged["overrides"] = inherited + mine
+    merged["extend_globs"] = extend_globs
     return merged
+
+
+def _unset(entry: dict[str, Any], inherited: list[tuple[Any, str, int, bool]], where: str) -> list[tuple[Any, str, int, bool]]:
+    """Remove the `unset` globs from the overrides this file inherits; an entry left with no glob goes."""
+    check_keys(entry, {"unset", "reason"}, where)
+    require_keys(entry, ("unset", "reason"), where)
+    globs = expect_str_list(entry["unset"], f"{where}.unset")
+    expect_str(entry["reason"], f"{where}.reason")
+    out = inherited
+    for glob in globs:
+        hit = [item for item in out if isinstance(item[0], dict) and isinstance(item[0].get("paths"), list)
+               and glob in item[0]["paths"]]
+        if not hit:
+            raise ConfigError(f"{where}.unset: {glob!r} is not a glob of any inherited override")
+        out = [
+            ({**e, "paths": [p for p in e["paths"] if p != glob]}, *rest) if (e, *rest) in hit else (e, *rest)
+            for e, *rest in out
+        ]
+    return [item for item in out if not (isinstance(item[0], dict) and item[0].get("paths") == [])]
 
 
 def _resolve_aliases(data: dict[str, Any], source: str) -> dict[str, Any]:
@@ -204,9 +253,9 @@ def load(config_path: Path | None, today: datetime.date) -> Config:
 
 
 def _validate(raw: dict[str, Any], today: datetime.date) -> Config:
-    check_keys(raw, _TOP_KEYS, "config")
+    check_keys(raw, _TOP_KEYS | {"extend_globs"}, "config")  # extend_globs: collected by _load_raw
     discover = raw.get("discover", {})
-    check_keys(discover, {"globs"}, "discover")
+    check_keys(discover, {"globs"}, "discover")  # extend_globs was taken out while loading
     globs = expect_str_list(discover.get("globs"), "discover.globs")
 
     al = raw.get("allowlist", {})
@@ -253,8 +302,9 @@ def _validate(raw: dict[str, Any], today: datetime.date) -> Config:
         "files": expect_str_list(pins.get("files", PIN_DEFAULTS["files"]), "check_pins.files"),
     }
     overrides = overrides_mod.parse(raw.get("overrides", []), set(RULES))
+    extend_globs = list(raw.get("extend_globs", []))
     shared = {group: shared_raw[group] for group in SHARED}
     return Config(
         globs=globs, allowlist=settings, entries=entries, rules=rules, shared=shared, params=params,
-        check_pins=pins, overrides=overrides,
+        check_pins=pins, overrides=overrides, extend_globs=extend_globs,
     )

@@ -13,12 +13,14 @@ from .rules import MODULES
 
 
 def _level(rule_level: str, finding: Finding) -> str:
-    """The rule level caps a finding: a rule at `warn` never produces an error. R6 emits warnings only."""
+    """The level caps a finding: at `warn` it is never an error; `off` drops it. R6 emits warnings only."""
+    if rule_level == "off":
+        return "off"
     return "warn" if rule_level == "warn" or finding.level == "warn" else "error"
 
 
 def analyze(root: Path, config: Config, today: datetime.date, warn_as_error: bool = False) -> list[Finding]:
-    paths = discover.instruction_files(root, config.globs)
+    paths = discover.instruction_files(root, config.all_globs)
     alias = discover.aliases(root, paths)
     paths = [p for p in paths if p not in alias]
     findings: list[Finding] = []
@@ -30,7 +32,9 @@ def analyze(root: Path, config: Config, today: datetime.date, warn_as_error: boo
             findings.append(Finding(path, 0, INPUT_RULE, "file is not valid UTF-8"))
     ctx = Context(root, discover.tracked_files(root), raw)
     for module in MODULES:
-        levels = {rule_id: config.rules[rule_id]["level"] for rule_id, _, _ in module.CHECKS}
+        base = {rule_id: config.rules[rule_id]["level"] for rule_id, _, _ in module.CHECKS}
+        # A rule runs at the highest level a `raise` override can give it, so it has findings to raise.
+        levels = {rule_id: overrides.run_level(rule_id, level, config.overrides) for rule_id, level in base.items()}
         if all(level == "off" for level in levels.values()):
             continue
         params = config.params[module.__name__]
@@ -40,9 +44,11 @@ def analyze(root: Path, config: Config, today: datetime.date, warn_as_error: boo
                 found.extend(module.check(path, text, params, levels))
         if hasattr(module, "check_repo"):
             found.extend(module.check_repo(ctx, params, levels))
-        findings.extend(replace(f, level=_level(levels[f.rule], f)) for f in found if levels[f.rule] != "off")
-    # Overrides before the allowlist: an entry for a path an override silences is no longer needed.
-    findings = overrides.apply(findings, config.overrides)
+        # Overrides before the allowlist: an entry for a path an override silences is no longer needed.
+        for f in found:
+            level = _level(overrides.level_for(f.path, f.rule, base[f.rule], config.overrides), f)
+            if level != "off":
+                findings.append(replace(f, level=level))
     findings = allowlist.apply(findings, config.entries, config.allowlist, set(paths), today)
     findings += overrides.stale(config.overrides, set(paths), root)
     if warn_as_error:
