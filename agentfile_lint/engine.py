@@ -1,4 +1,4 @@
-"""Run the enabled rules over the full instruction-file set."""
+"""Run the enabled rules over the full set of each file family (instruction files, skill files)."""
 from __future__ import annotations
 
 import datetime
@@ -7,16 +7,16 @@ from pathlib import Path
 
 from . import allowlist, disable, discover, overrides
 from .config import Config
-from .context import Context
+from .context import Context, normalize_newlines
 from .finding import INPUT_RULE, Finding
-from .rules import MODULES
+from .rules import FAMILY, INSTRUCTION, MODULES
 
 
 # Rules with no module and no `[rules]` level, always on: id -> description (`--list-rules`, SARIF).
 PSEUDO_RULES = {
     allowlist.RULE_ID: "expired, no-longer-needed or miscounted allowlist entries; warns before expiry and on an override glob that matches no file (always on)",
     disable.RULE_ID: "malformed per-line directives; warns on a directive that suppresses nothing (always on)",
-    INPUT_RULE: "instruction file is not valid UTF-8; only an allowlist entry can exempt it (always on)",
+    INPUT_RULE: "analyzed file is not valid UTF-8; only an allowlist entry can exempt it (always on)",
 }
 
 
@@ -34,14 +34,20 @@ def analyze(
     paths = discover.instruction_files(root, config.all_globs, files)
     alias = discover.aliases(root, paths)
     paths = [p for p in paths if p not in alias]
+    # Each family's rules see only that family's files; a file both glob lists match is in both.
+    skill_paths = discover.instruction_files(root, config.all_skill_globs, files)
+    skill_alias = discover.aliases(root, skill_paths)
+    skill_paths = [p for p in skill_paths if p not in skill_alias]
     findings: list[Finding] = []
-    raw: dict[str, str] = {}
-    for path in paths:
+    stored: dict[str, str] = {}
+    for path in dict.fromkeys(paths + skill_paths):
         try:
-            raw[path] = (root / path).read_bytes().decode("utf-8")  # read once, as stored (docs/design.md, R1a to R1d)
+            stored[path] = (root / path).read_bytes().decode("utf-8")  # read once, as stored (docs/design.md, R1a to R1d)
         except UnicodeDecodeError:
             findings.append(Finding(path, 0, INPUT_RULE, "file is not valid UTF-8"))
-    ctx = Context(root, files, raw)
+    ctx = Context(root, files, {p: stored[p] for p in paths if p in stored})
+    skills = {p: normalize_newlines(stored[p]) for p in skill_paths if p in stored}
+    texts = {INSTRUCTION: ctx.files, "skill": skills}
     for module in MODULES:
         base = {rule_id: config.rules[rule_id]["level"] for rule_id, _, _ in module.CHECKS}
         # A rule runs at the highest level a `raise` override can give it, so it has findings to raise.
@@ -51,7 +57,7 @@ def analyze(
         params = config.params[module.__name__]
         found: list[Finding] = []
         if hasattr(module, "check"):
-            for path, text in ctx.files.items():
+            for path, text in texts[FAMILY[module]].items():
                 found.extend(module.check(path, text, params, levels))
         if hasattr(module, "check_repo"):
             found.extend(module.check_repo(ctx, params, levels))
@@ -62,8 +68,9 @@ def analyze(
                 findings.append(replace(f, level=level))
     # Per-line directives before the allowlist: a suppressed finding never counts toward an entry's count.
     findings = disable.apply(findings, ctx.files)
-    findings = allowlist.apply(findings, config.entries, config.allowlist, set(paths), today)
-    findings += overrides.stale(config.overrides, set(paths), root)
+    analyzed = set(paths) | set(skill_paths)
+    findings = allowlist.apply(findings, config.entries, config.allowlist, analyzed, today)
+    findings += overrides.stale(config.overrides, analyzed, root)
     if warn_as_error:
         findings = [replace(f, level="error") for f in findings]
     return sorted(findings, key=Finding.sort_key)

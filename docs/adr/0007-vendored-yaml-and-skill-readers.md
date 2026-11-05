@@ -2,7 +2,8 @@
 
 Status: accepted. Narrows the "no third-party dependencies at run time" goal of `docs/design.md` to "nothing
 to install". The parser part is implemented in 0.9.0 (`agentfile_lint/_yaml/`,
-`agentfile_lint/frontmatter.py`); the reader groups are written by the change that adds the `S` rules.
+`agentfile_lint/frontmatter.py`); the reader groups are implemented by S1 to S12, also in 0.9.0
+(`agentfile_lint/rules/skill.py`, docs/rules.md).
 
 ## Context
 
@@ -41,6 +42,10 @@ How it is kept honest:
 - Only `agentfile_lint/frontmatter.py` imports it, and only with `SafeLoader` (plain data, no Python
   object tags); `tests/test_architecture.py` checks the first, a test with a `!!python/object` tag the
   second. The vendored code's own imports are not checked for direction.
+- The S rules call it with `strings=True`: `SafeLoader` only composes the block (grammar, anchors and
+  aliases, no constructor runs) and every scalar is its text. YAML 1.1 type resolution would make
+  `description: yes` a boolean and fail on `version: 2026-02-30`; Claude Code's YAML 1.2 parser and
+  the reference validator's strictyaml read both as strings, so S1 reports only what does not parse.
 - `vendor` copies it with its `LICENSE` and `PROVENANCE`; the wheel ships both.
 
 Costs: 5,789 lines of third-party code whose security fixes this project has to follow (an
@@ -54,8 +59,10 @@ the JavaScript parser Claude Code uses.
 
 Options:
 
-- A: every `S` rule belongs to one reader group: `claude-code` (on by default) or `agentskills`
-  (claude.ai upload, the Skills API and the specification), selected by `[skills] targets`.
+- A: every `S` rule belongs to the reader groups it protects: `claude-code` (on by default),
+  `agentskills` (claude.ai upload, the Skills API and the specification), or both when both readers
+  break the same way (S1 YAML that does not parse, S2 the 500-line guidance); `[skills] targets`
+  selects the groups, and a rule none of them reads does not run.
 - B: one rule set for every reader, following the specification.
 
 Decision: A, the way ESLint `env`, browserslist and `tsconfig` `target` check against a declared

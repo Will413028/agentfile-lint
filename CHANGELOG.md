@@ -11,6 +11,19 @@ versions follow [Semantic Versioning](https://semver.org/).
   `LICENSE` and a `PROVENANCE` record, and `agentfile_lint/frontmatter.py`, which parses YAML
   frontmatter with it (`SafeLoader` only) for the coming `SKILL.md` rules. Nothing new to install;
   `dependencies` stays empty. The vendored copy written by `vendor` now includes `_yaml/` (docs/adr/0007).
+- `SKILL.md` rules S1 to S12, all at `warn`, run on a new file family: `[discover] skill_globs`
+  (default `["**/SKILL.md"]`) and `extend_skill_globs`, which concatenates along `extends` like
+  `extend_globs`. No R or C rule runs on a `SKILL.md`. Each S id belongs to the reader it protects:
+  `claude-code` (S1 to S4 and S12: YAML that parses, fewer than 500 lines, `description` plus `when_to_use` within
+  Claude Code's 1536-character listing, `metadata` a map; S12, no character Claude Code refuses in
+  `name` or the directory name) and `agentskills` (S1, S2 and S5 to S11:
+  claude.ai upload, the Skills API and the Agent Skills specification). The new `[skills] targets`
+  (default `["claude-code"]`) names the readers a repository writes for; S5 to S11 run only with
+  `agentskills` listed, and an unknown target fails the configuration; an empty `targets` or
+  `skill_globs` turns the family off. Frontmatter scalars are read as their text, without YAML 1.1
+  types (docs/rules.md, docs/adr/0007).
+  `config --format json` shows `skills` and the two new `discover` keys; the E0 description now reads
+  "analyzed file".
 
 ## [0.8.0] - 2026-11-05
 

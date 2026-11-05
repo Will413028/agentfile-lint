@@ -1,4 +1,5 @@
 import datetime
+import time
 import unittest
 
 from agentfile_lint import frontmatter
@@ -65,6 +66,53 @@ class ParseTest(unittest.TestCase):
     def test_deep_nesting_has_no_crash(self):
         r = frontmatter.parse("---\na: " + "[" * 100000 + "\n---\n")
         self.assertIsNotNone(r.error)
+
+
+
+class StringsTest(unittest.TestCase):
+    def test_scalars_are_their_text(self):
+        r = frontmatter.parse("---\nd: 2026-02-30\ny: yes\nn: 12\nm: [1, {a: b}]\ne:\n---\n", strings=True)
+        self.assertIsNone(r.error)
+        self.assertEqual(r.value, {"d": "2026-02-30", "y": "yes", "n": "12", "m": ["1", {"a": "b"}], "e": ""})
+
+    def test_tags_are_never_constructed(self):
+        r = frontmatter.parse("---\nx: !!python/object/apply:os.system [echo hi]\n---\n", strings=True)
+        self.assertEqual(r.value, {"x": ["echo hi"]})
+
+    def test_aliases_share_one_value(self):
+        text = "---\na: &a [x, x, x, x, x, x, x, x, x]\n" + "".join(
+            f"{k}: &{k} [{', '.join(['*' + p] * 9)}]\n" for p, k in zip("abcdefg", "bcdefgh")) + "---\n"
+        r = frontmatter.parse(text, strings=True)   # 9**8 leaves if each alias were copied
+        self.assertIs(r.value["h"][0], r.value["g"])
+
+    def test_a_non_scalar_key_is_an_error_not_an_expansion(self):
+        text = "---\na: &a [x, x, x, x, x, x, x, x, x]\n" + "".join(
+            f"{k}: &{k} [{', '.join(['*' + p] * 9)}]\n" for p, k in zip("abcdefg", "bcdefgh")) + "? *h\n: 1\n---\n"
+        start = time.monotonic()
+        r = frontmatter.parse(text, strings=True)
+        self.assertLess(time.monotonic() - start, 1.0)
+        # An alias is its anchor's node, so the error points at the anchor (`h:` on line 9).
+        self.assertEqual((r.error, r.line), ("invalid YAML: a mapping key is not a string", 9))
+        self.assertEqual(frontmatter.parse("---\n[a, b]: 1\n---\n", strings=True).error,
+                         "invalid YAML: a mapping key is not a string")
+
+    def test_duplicate_keys_fail_at_the_second(self):
+        r = frontmatter.parse("---\nname: ok\nname: other\n---\n", strings=True)
+        self.assertEqual((r.error, r.line), ("invalid YAML: duplicate key 'name'", 3))
+
+    def test_merge_keys_are_applied_and_written_keys_win(self):
+        r = frontmatter.parse("---\nbase: &b {name: x, description: d}\n<<: *b\nname: y\n---\n", strings=True)
+        self.assertEqual({k: r.value[k] for k in ("name", "description")}, {"name": "y", "description": "d"})
+        self.assertEqual(r.keys, {"base": 2, "name": 4, "description": 3})
+
+    def test_key_lines_come_from_the_parse_not_the_text(self):
+        text = '---\ndescription: "first\nname: x"\ntags: {a: 1,\nlicense: 2}\nname: n\nlicense: l\n---\n'
+        r = frontmatter.parse(text, strings=True)
+        self.assertEqual(r.keys, {"description": 2, "tags": 4, "name": 6, "license": 7})
+
+    def test_grammar_errors_still_fail(self):
+        r = frontmatter.parse("---\nname: x\ndescription: a: b\n---\n", strings=True)
+        self.assertEqual((r.error, r.line), ("invalid YAML: mapping values are not allowed here", 3))
 
 
 if __name__ == "__main__":

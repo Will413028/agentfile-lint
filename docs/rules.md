@@ -31,6 +31,18 @@ new ids.
 | [R5b](#r5a-and-r5b-duplicates) | `sibling-duplicates` | lines repeated in other files | heuristic | off | warn |
 | [R6](#r6-copied-constants) | `constants` | values copied from code | heuristic | off | warn |
 | [C1](#c1-claudemd) | `claude-md` | `CLAUDE.md` only imports `AGENTS.md` | convention | off | warn |
+| [S1](#s1-to-s12-skillmd) | `skill-yaml` | `SKILL.md` frontmatter is valid YAML and a mapping | objective | warn | same |
+| [S2](#s1-to-s12-skillmd) | `skill-lines` | `SKILL.md` has fewer than 500 lines | objective | warn | same |
+| [S3](#s1-to-s12-skillmd) | `skill-listing-chars` | `description` plus `when_to_use` fit 1536 characters | objective | warn | same |
+| [S4](#s1-to-s12-skillmd) | `skill-metadata-map` | `metadata` is a map | objective | warn | same |
+| [S5](#s1-to-s12-skillmd) | `skill-frontmatter` | `SKILL.md` has frontmatter | objective, `agentskills` target | warn, not run | same |
+| [S6](#s1-to-s12-skillmd) | `skill-name-length` | `name` is 1 to 64 characters | objective, `agentskills` target | warn, not run | same |
+| [S7](#s1-to-s12-skillmd) | `skill-name-chars` | `name` characters | objective, `agentskills` target | warn, not run | same |
+| [S8](#s1-to-s12-skillmd) | `skill-name-dir` | `name` equals the directory name | objective, `agentskills` target | warn, not run | same |
+| [S9](#s1-to-s12-skillmd) | `skill-description` | `description` is 1 to 1024 characters | objective, `agentskills` target | warn, not run | same |
+| [S10](#s1-to-s12-skillmd) | `skill-compatibility` | `compatibility` is 1 to 500 characters | objective, `agentskills` target | warn, not run | same |
+| [S11](#s1-to-s12-skillmd) | `skill-keys` | only the specification's six frontmatter keys | objective, `agentskills` target | warn, not run | same |
+| [S12](#s1-to-s12-skillmd) | `skill-name-refused` | no character Claude Code refuses in `name` or the directory name | objective | warn | same |
 | [allowlist](#allowlist) | — | exceptions are current and still needed | objective | error | error |
 | [disable](#disable) | — | per-line directives are well formed and still needed | objective | error | error |
 
@@ -221,8 +233,77 @@ Default: on; with no directives it reports nothing. No level or override changes
 
 Measured: objective, so no false-positive rate.
 
+## S1 to S12 SKILL.md
+
+Why: a `SKILL.md` has two kinds of reader, and they disagree. Claude Code ignores a frontmatter field
+it does not know, takes a `name` that differs from the directory (or no `name` at all), and when the
+YAML does not parse it still loads the skill, with no fields set, so Claude cannot match the
+`description`
+([Claude Code skills](https://code.claude.com/docs/en/skills), "Frontmatter reference", "Skill not
+triggering"). claude.ai upload, the Skills API and `package_skill.py` follow the
+[Agent Skills specification](https://agentskills.io/specification) and fail with a hard error on any
+key outside its six (`name`, `description`, `license`, `compatibility`, `metadata`, `allowed-tools`)
+(the same page, "Using skill frontmatter outside Claude Code"). So every S id belongs to the readers
+it protects, and `[skills] targets` names the readers a repository writes for:
+
+| Id | Reader | Finding | Source |
+|---|---|---|---|
+| S1 | both | the frontmatter is not valid YAML (reported at the parse error's line), has no closing `---`, or is not a mapping | Claude Code: "If the YAML between the markers doesn't parse, the skill still loads with no fields set"; specification: "must contain YAML frontmatter" |
+| S2 | both | the file has 500 lines or more (whole file, counted like R1b) | both: "Keep `SKILL.md` under 500 lines" |
+| S3 | `claude-code` | `description` and `when_to_use` together are more than 1536 characters | Claude Code: "the combined `description` and `when_to_use` text is truncated at 1,536 characters in the skill listing" |
+| S4 | `claude-code` | `metadata` is present and not a map | Claude Code: "drops a value that isn't a map" |
+| S5 | `agentskills` | no frontmatter: the first line is not `---` | specification: "must contain YAML frontmatter" |
+| S6 | `agentskills` | `name` is missing, not a string, empty, or longer than 64 characters | specification: "Must be 1-64 characters" |
+| S7 | `agentskills` | `name` is not lowercase, has a character other than a letter, digit or `-`, starts or ends with `-`, or contains `--` | specification, `name` field |
+| S8 | `agentskills` | `name` differs from the name of the directory that holds the file (not checked for a `SKILL.md` at the repository root, whose directory name depends on the checkout) | specification: "Must match the parent directory name" |
+| S9 | `agentskills` | `description` is missing, not a string, blank, or longer than 1024 characters | specification: "Must be 1-1024 characters" |
+| S10 | `agentskills` | `compatibility` is present and not a string of 1 to 500 characters | specification: "Must be 1-500 characters if provided" |
+| S11 | `agentskills` | a top-level key outside the six | Claude Code, "Using skill frontmatter outside Claude Code" |
+| S12 | `claude-code` | `name`, or the name of the directory that holds the file, has a character Claude Code refuses: `<` or `>`; a control or format character (zero-width, direction-changing); a private-use or unassigned character; a blank other than a plain space; a space at the start or end or two in a row | Claude Code, "Characters a skill name can't hold": a refused `name` is not shown in the `/` menu and does not invoke the skill; a refused directory name keeps the skill from loading, except in a plugin's `skills/`, where the characters become hyphens |
+
+Default: `targets = ["claude-code"]`, so S5 to S11 do not run; the levels are all `warn`. A repository
+that uploads its skills to claude.ai or the Skills API sets `targets = ["claude-code", "agentskills"]`.
+`targets = []` runs no S id, and `[discover] skill_globs = []` stops discovering `SKILL.md` files.
+An id that no listed reader reads does not run whatever its level, and an override cannot turn it on.
+
+Readings:
+
+- YAML is parsed by the vendored PyYAML 6.0.3 (docs/adr/0007), and every scalar is read as its text,
+  without YAML 1.1 type resolution: `description: yes` is the string `yes` and `version: 2026-02-30`
+  is not an error, as YAML 1.2 parsers read them; `name: 12` is the name `12`, as `skills-ref`'s
+  strictyaml reads it (YAML 1.1 and the YAML 1.2 core schema read the number 12). Merge keys (`<<`)
+  are applied. A duplicate key is S1, as YAML 1.2 parsers and strictyaml reject it; a mapping key
+  that is not a scalar (`[a, b]: 1`) is S1 too, without a claim about Claude Code, since readers
+  differ on it. A block-scalar `name` (`name: |`) is read without its final line break. Flow collections (`[a, b]`) are valid YAML, read by both readers, and not
+  reported; `skills-ref` rejects them because strictyaml does. An empty frontmatter block is no
+  fields, not an error.
+- Lengths count Unicode characters (code points) after YAML parsing. S6 to S8 compare `name` after
+  stripping surrounding blanks and NFKC normalization.
+- S7 follows `skills-ref` rather than the specification's `a-z` example: the specification says
+  "unicode lowercase alphanumeric characters (a-z, 0-9)", which reads two ways, and `skills-ref`
+  accepts any Unicode lowercase letter or digit (`données` passes).
+- S3's 1536 is Claude Code's default; Claude Code's `skillListingMaxDescChars` setting changes it, and
+  this tool does not read Claude Code settings. If you raised the cap, turn S3 off for those paths
+  with an override.
+- S10 also reports an empty string, which the specification excludes and `skills-ref` accepts.
+- S12 follows the documented list; which code points count as unassigned follows the Unicode version
+  of the Python that runs the check.
+- Not checked: the types of `metadata` values (`skills-ref` does not check them and neither reader
+  breaks on them); fields only Claude Code reads.
+
+Per-line directives cannot name S ids (docs/design.md, File families); use an allowlist entry or an
+override.
+
+Measured: objective, so no false-positive rate. On the 22-repository sample of docs/field-report.md
+(1695 `SKILL.md` files, 2026-11-06): with the default `claude-code` target, S1 reports 1 file, S2
+199 files in 8 repositories and S12 none; with `agentskills` added, S5 reports 4, S7 30, S8 29, S10 3 and S11 877
+files. Compared file by file with `skills-ref` (which fails 929 files), 1435 files get the same
+verdict and the same checks; the other 260 all use a flow collection that strictyaml rejects (S1
+there, valid YAML here, so those files show only their other findings, mostly S11). R and C findings
+on the sample are the same as 0.8.0's.
+
 ## Rule ids for other files
 
-Planned, not implemented: rules for other file types get an id prefix per family, so ids stay unique
-as checks are added: `S` for `SKILL.md`, `H` for hooks, `M` for MCP configuration. `R` and `C` stay with
+Rules for other file types get an id prefix per family, so ids stay unique as checks are added: `S` for
+`SKILL.md` (above), `H` for hooks and `M` for MCP configuration (planned). `R` and `C` stay with
 instruction files, and `E` is reserved for input errors such as `E0`.

@@ -43,9 +43,9 @@ effective config + git ls-files or the --no-git walk (full set) -> rules -> find
 - Merge: tables merge key by key (the child wins); every other value, lists included, is replaced.
   Two lists concatenate along the `extends` chain instead, parents first: `[[overrides]]`, because
   replacing them would silently drop the overrides of the config a file extends (a child removes an
-  inherited glob with an `unset` entry, see Overrides), and `discover.extend_globs`, which adds to
-  `discover.globs` the way ruff's `extend-select` adds to `select` (a child that replaces `globs` keeps
-  every inherited `extend_globs`). The shipped presets carry no overrides: a path scope belongs to one
+  inherited glob with an `unset` entry, see Overrides), and `discover.extend_globs` and
+  `discover.extend_skill_globs`, which add to `discover.globs` and `discover.skill_globs` the way ruff's
+  `extend-select` adds to `select` (a child that replaces `globs` keeps every inherited `extend_globs`). The shipped presets carry no overrides: a path scope belongs to one
   repository's layout.
 - Unknown keys, unknown rule ids and malformed allowlist entries fail the configuration (exit 2).
   A typo must not silently disable a check.
@@ -68,6 +68,29 @@ symlink to a file outside the discovered set is analyzed as its own file; a dang
 `.pytest_cache`, `.ruff_cache`, `.cache`, `.direnv`, `.gradle`, `.next` or `.terraform` at any depth, does not follow directory symlinks, and does not read
 `.gitignore` (docs/adr/0006). Without the flag, running outside a git repository is still exit 2: the
 scan never switches scope on its own.
+### File families
+
+Each rule module checks one family of files, and each family has its own glob lists:
+
+| Family | Globs | Default | Rules |
+|---|---|---|---|
+| instruction | `discover.globs`, `discover.extend_globs` | `AGENTS.md`, `CLAUDE.md` at any depth | R1a to R6, C1 |
+| skill | `discover.skill_globs`, `discover.extend_skill_globs` | `**/SKILL.md` | S1 to S12 |
+
+Rules of one family never see the files of another: R2 to R6 do not run on `SKILL.md`, and R5a does
+not compare a `SKILL.md` with the `AGENTS.md` above it (one is loaded on demand, the other whenever an
+agent works in the directory). A file both lists match is in both families. The `.local.md` exclusion,
+the deleted-file skip, `--no-git`, the same-directory alias rule above and the E0 check apply to
+every family. Per-line directives are read from instruction files only:
+text in a `SKILL.md` body is skill content, and its frontmatter cannot hold an HTML comment, so S ids
+cannot be named in a directive (an allowlist entry or an override covers them). Hooks and MCP files
+are planned as further families.
+
+Which S ids run also depends on `[skills] targets` (default `["claude-code"]`): each S id belongs to
+the readers it protects, and an id that no listed reader reads does not run, whatever its level or an
+override says (docs/rules.md, S1 to S12; docs/adr/0007). Unknown targets fail the configuration; an
+empty `targets` or `skill_globs` turns the skill family off (`globs` must stay non-empty).
+
 File names given on the command line are not used to narrow the analysis: cross-file rules and the
 allowlist "no longer needed" check need the whole set, and a partial view would make them pass locally
 and fail in CI. Hooks therefore use `pass_filenames: false`.
@@ -239,8 +262,8 @@ the next line of the same file (docs/adr/0006).
 - "Next line" counts lines the way every rule does: only LF, CRLF and a lone CR end a line.
 - It goes in the file that reports the finding: for R5a and R5b, the file with the repeated line, not
   the ancestor or sibling it repeats.
-- Rules whose findings are about the whole file (R1a, R1b, R1c, C1) are not accepted; use an allowlist
-  entry or an override.
+- Rules whose findings are about the whole file (R1a, R1b, R1c, C1) and rules of other file families
+  (S1 to S12) are not accepted; use an allowlist entry or an override.
 - The directive is ordinary text for the other rules: it counts toward R1a, R1b, R1c and R1d.
 - Directives run after overrides and before the allowlist, so a suppressed finding does not count
   toward an entry's `count`.

@@ -27,7 +27,23 @@ class ExtendGlobsTest(unittest.TestCase):
             CFG: 'extends = ["base.toml"]\n[discover]\nglobs = ["AGENTS.md"]\nextend_globs = ["B.md"]\n',
         })
         doc = json.loads(helpers.run_new(root, "config").stdout)
-        self.assertEqual(doc["discover"], {"globs": ["AGENTS.md"], "extend_globs": ["A.md", "B.md"]})
+        self.assertEqual(doc["discover"], {
+            "globs": ["AGENTS.md"], "extend_globs": ["A.md", "B.md"], "skill_globs": ["**/SKILL.md"], "extend_skill_globs": [],
+        })
+
+    def test_skill_globs_concatenate_the_same_way(self):
+        root = helpers.make_repo({
+            "AGENTS.md": "ok\n", "base.toml": '[discover]\nextend_skill_globs = ["a/SKILL.md"]\n',
+            CFG: 'extends = ["base.toml"]\n[discover]\nskill_globs = ["x/SKILL.md"]\nextend_skill_globs = ["b/SKILL.md"]\n',
+        })
+        doc = json.loads(helpers.run_new(root, "config").stdout)
+        self.assertEqual((doc["discover"]["skill_globs"], doc["discover"]["extend_skill_globs"]),
+                         (["x/SKILL.md"], ["a/SKILL.md", "b/SKILL.md"]))
+
+    def test_extend_skill_globs_at_the_top_level_fails(self):
+        r = run({"AGENTS.md": "ok\n", CFG: 'extend_skill_globs = ["a/SKILL.md"]\n'})
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("extend_skill_globs belongs in [discover]", r.stderr)
 
     def test_type_error_fails(self):
         for value in ('"GEMINI.md"', "[1]"):
