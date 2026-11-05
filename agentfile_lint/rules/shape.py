@@ -25,7 +25,12 @@ _MODES = ("exact", "ordered")
 _SHAPE_KEYS = {"glob", "sections", "mode", "heading_level", "title", "purpose", "bullets_only", "must_match"}
 
 
-def validate(shared: None, tables: dict[str, dict[str, Any]]) -> dict[str, Any]:
+def validate(shared: None, tables: dict[str, dict[str, Any]]) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    params = _params(tables)
+    return params, {ID: params}
+
+
+def _params(tables: dict[str, dict[str, Any]]) -> dict[str, Any]:
     params = tables[ID]
     where = f"rules.{ID}"
     check_keys(params, {"level", "shapes"}, where)

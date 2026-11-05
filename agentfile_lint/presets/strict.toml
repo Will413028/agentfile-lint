@@ -15,6 +15,7 @@ level = "warn"
 
 [shared.duplicates]
 ancestor_pairs = "any"
+exclude = []
 
 [rules.R5b]
 level = "warn"

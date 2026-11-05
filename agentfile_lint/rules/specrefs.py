@@ -23,7 +23,12 @@ DESCRIPTION = "spec section references (§N) match a numbered heading in the spe
 CHECKS = ((ID, NAME, DESCRIPTION),)
 
 
-def validate(shared: None, tables: dict[str, dict[str, Any]]) -> dict[str, Any]:
+def validate(shared: None, tables: dict[str, dict[str, Any]]) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    params = _params(tables)
+    return params, {ID: params}
+
+
+def _params(tables: dict[str, dict[str, Any]]) -> dict[str, Any]:
     params = tables[ID]
     where = f"rules.{ID}"
     check_keys(params, {"level", "specs", "ref_pattern", "heading_pattern", "ignore_qualified", "plain_words", "ignore_before"}, where)

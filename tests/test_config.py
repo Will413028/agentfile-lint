@@ -118,7 +118,7 @@ class ConfigTest(unittest.TestCase):
         doc = json.loads(r.stdout)
         self.assertEqual(doc["shared"], {
             "size": {"excluded_blocks": []},
-            "duplicates": {"ancestor_pairs": "same-name", "min_chars": 40, "ignore_headings": True, "ignore_patterns": []},
+            "duplicates": {"ancestor_pairs": "same-name", "min_chars": 40, "ignore_headings": True, "ignore_patterns": [], "exclude": []},
         })
         self.assertEqual(list(doc["rules"]), sorted(["R1a", "R1b", "R1c", "R1d", "R2", "R3a", "R3b", "R3c", "R4a", "R4b", "R5a", "R5b", "R6", "C1"]))
         self.assertEqual(doc["rules"]["R5b"], {"level": "off"})

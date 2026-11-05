@@ -4,8 +4,8 @@ For each rule: why a finding is a problem, where its default comes from, whether
 only with `preset:strict`, and how often it was wrong when measured. Every key is documented in
 `agentfile_lint/presets/default.toml`; `agentfile-lint --list-rules` prints the effective levels.
 
-Every rule in the table except `allowlist` has an id and an alias (the name after the level in
-`--list-rules`); `allowlist` and `E0` have only their id. The alias works wherever the id does:
+Every rule in the table except `allowlist` and `disable` has an id and an alias (the name after the level in
+`--list-rules`); `allowlist`, `disable` and `E0` have only their id. The alias works wherever the id does:
 `[rules.file-lines]` is `[rules.R1b]`, an allowlist entry may say `rule = "file-lines"`, and an override
 may say `rules = { file-lines = "warn" }`. Each config file is resolved on its own before merging, so a
 repo's `[rules.file-lines]` overrides a preset's `[rules.R1b]`; one file that names a rule both ways
@@ -32,6 +32,7 @@ new ids.
 | [R6](#r6-copied-constants) | `constants` | values copied from code | heuristic | off | warn |
 | [C1](#c1-claudemd) | `claude-md` | `CLAUDE.md` only imports `AGENTS.md` | convention | off | warn |
 | [allowlist](#allowlist) | — | exceptions are current and still needed | objective | error | error |
+| [disable](#disable) | — | per-line directives are well formed and still needed | objective | error | error |
 
 ## How the rates were measured
 
@@ -70,7 +71,8 @@ file where the total first exceeds the limit); `AGENTS.md` and `CLAUDE.md` over 
 (R1b). Both are limits an agent's documentation states; the first one drops text, the second is
 guidance. Per-file byte limits (R1a `limits`) and a per-line character limit (R1d `max_chars`) are yours
 to add. Each id has its own level, so an allowlist entry for the 200-line warning does not hide the
-32 KiB error on the same file.
+32 KiB error on the same file. Lines are counted, and every rule's line numbers given, by LF, CRLF and a lone
+CR only, as `grep -n` counts them; form feed and U+2028 do not end a line.
 
 Blind spot: the default counts no characters. A `CLAUDE.md` under 200 lines with long or non-ASCII
 lines passes even when Claude Code would cut it, and the 32 KiB path limit covers only `AGENTS.md`. To
@@ -161,7 +163,9 @@ tuning sample, all 54 same-name findings came from one repository and were delib
 (translations under `docs/<language>/`, `examples/`). Such a repository turns R5a and R5b off for those
 paths with `[[overrides]]` (`paths = ["docs/**", "examples/**"]`, `rules = { R5a = "off", R5b = "off" }`).
 An override silences the findings on the files it matches: with `preset:strict`, R5b still reports the
-original outside those paths, since its finding is on that file.
+original outside those paths, since its finding is on that file. To leave copies out of the comparison
+altogether, list them in `[shared.duplicates] exclude` (globs, default none): an excluded file is
+neither reported nor used as the ancestor text, so the original is not reported either.
 
 Measured, strict pairs (tuning sample, 0.4.0): 20 of 20 false positives. 11 of them were a file compared
 with its own symlink, fixed in 0.5.0; the other 9 were translations, templates and examples, 9 of 9
@@ -195,12 +199,25 @@ did not recognize as the import. 0.5.0 with `preset:strict` reports 26 of them.
 Why: a debt exception without an end date becomes permanent without anyone deciding so. Every allowlist
 entry has a reason and an expiry date at most `max_days` (90) ahead; an expired entry, or one that no
 longer suppresses anything, fails. A path that is meant to differ for good goes in `[[overrides]]`
-instead, with a required reason; each glob of an override in the config file the run loads (not one
-reached through `extends`) that matches no analyzed instruction file is a warning, so a stale override
-shows up without failing CI unless `--warn-as-error` is given.
+instead, with a required reason; each glob of an override that matches no analyzed instruction file is
+a warning on the config file that wrote it (an inherited one is removed with `unset`), so a stale
+override shows up without failing CI unless `--warn-as-error` is given.
 
 Default: on, from your config only; with no entries it reports nothing. Entries warn `warn_days` (14)
 before they expire, so run CI on a weekly schedule.
+
+Measured: objective, so no false-positive rate.
+
+## disable
+
+Why: a false positive on one line should be fixable next to that line, but an exception without a
+reason or one that no longer applies is as bad as an allowlist entry without them.
+`<!-- agentfile-lint-disable-next-line R5a -- reason -->` on a line of its own drops the named rules'
+findings on the next line (docs/design.md, Per-line directives). A malformed directive (no id, no
+reason, an unknown id or a whole-file rule: `R1a`, `R1b`, `R1c`, `C1`) is an error; a named rule with no
+finding on the next line is a warning.
+
+Default: on; with no directives it reports nothing. No level or override changes it.
 
 Measured: objective, so no false-positive rate.
 

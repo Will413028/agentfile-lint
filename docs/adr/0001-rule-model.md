@@ -1,7 +1,7 @@
 # ADR 0001: Rule model
 
 Status: accepted. Decision 3 and the rejected inline-comment alternative are amended by ADR 0004
-(see Amendment below); ADR 0005 adds a required `count` to allowlist entries.
+(see Amendment below); ADR 0005 adds a required `count` to allowlist entries; ADR 0006 allows per-line directives.
 
 ## Context
 
@@ -53,3 +53,13 @@ also had permanent exceptions (translated or example copies), so:
   still needed can be checked (ruff RUF100, ESLint `reportUnusedDisableDirectives`); the remaining
   reasons are that a comment has no expiry date and that comments scatter exceptions over the
   instruction files instead of one place to audit (ADR 0004, decision 6).
+
+## Amendment (ADR 0006, 0.8.0)
+
+- Rejected inline comments: no longer rejected for single lines. The trigger ADR 0004 set (a report of a
+  single-line false positive) had not happened; 0.8.0 adds the directive anyway so the configuration
+  surface is fixed before the tool is announced (ADR 0006). A false positive on one line fixed through
+  the config means an allowlist entry that expires or an override
+  that silences a whole path. A per-line directive needs a reason, is reported when it suppresses
+  nothing, and covers exactly one line, so it stays auditable (`rg agentfile-lint-disable`) without an
+  expiry date. Whole-file exceptions still go in the config.

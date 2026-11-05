@@ -25,19 +25,21 @@ _KEYS = {
 _REMOVED = {"narrative_level": "removed in 0.7.0; narrative words are R4b, with its own level (docs/adr/0005)"}
 
 
-def validate(shared: None, tables: dict[str, dict[str, Any]]) -> dict[str, Any]:
+def validate(shared: None, tables: dict[str, dict[str, Any]]) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
     for rule_id, keys in _KEYS.items():
         where = f"rules.{rule_id}"
         moved = {k: f"belongs to {other} in 0.7.0 (docs/adr/0005)" for other, ks in _KEYS.items() if other != rule_id for k in ks}
         check_keys(tables[rule_id], keys | {"level"}, where, {**_REMOVED, **moved})
         require_keys(tables[rule_id], sorted(keys), where)
     a, b = tables["R4a"], tables["R4b"]
-    return {
+    params = {
         "date_patterns": expect_regex_list(a["date_patterns"], "rules.R4a.date_patterns"),
         "issue_patterns": expect_regex_list(a["issue_patterns"], "rules.R4a.issue_patterns"),
         "ignore_token_patterns": expect_regex_list(a["ignore_token_patterns"], "rules.R4a.ignore_token_patterns"),
         "narrative_words": expect_str_items(b["narrative_words"], "rules.R4b.narrative_words"),
     }
+    effective = {rule_id: {key: params[key] for key in sorted(keys)} for rule_id, keys in _KEYS.items()}
+    return params, effective
 
 
 def _word(word: str) -> re.Pattern[str]:

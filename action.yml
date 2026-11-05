@@ -8,6 +8,10 @@ inputs:
     description: Path to a config file. Default is .agentfile-lint.toml at the repo root, if present.
     required: false
     default: ''
+  working-directory:
+    description: Directory to run in, relative to the workspace (a repository checked out to a subdirectory). The config input is relative to it. Findings name paths from the git root, which is how annotations name a file.
+    required: false
+    default: '.'
   python-version:
     description: Python version to set up (3.11 or newer).
     required: false
@@ -20,6 +24,7 @@ runs:
         python-version: ${{ inputs.python-version }}
     - name: Run agentfile-lint
       shell: bash
+      working-directory: ${{ inputs.working-directory }}
       env:
         IL_CONFIG: ${{ inputs.config }}
         IL_ACTION_PATH: ${{ github.action_path }}

@@ -30,7 +30,7 @@ locally and in CI does.
 
 ```
 preset (shipped) <- repo config (.agentfile-lint.toml, `extends`) -> effective config
-effective config + git ls-files (full set) -> rules -> findings -> overrides -> allowlist -> output + exit code
+effective config + git ls-files or the --no-git walk (full set) -> rules -> findings -> overrides -> per-line directives -> allowlist -> output + exit code
 ```
 
 - Rules are data: a rule module reads parameters, and repo-specific behaviour is never a
@@ -39,16 +39,19 @@ effective config + git ls-files (full set) -> rules -> findings -> overrides -> 
   R5a and R5b) from one computation; parameters those ids share live in `[shared.<group>]`, the rest
   in `[rules.<id>]` (docs/adr/0005).
 - Merge: tables merge key by key (the child wins); every other value, lists included, is replaced.
-  The one exception is `[[overrides]]`: the lists concatenate, parents first, because replacing them
-  would silently drop the overrides of the config a file extends. A child therefore cannot undo an
-  inherited override, so the shipped presets carry none.
+  Two lists concatenate along the `extends` chain instead, parents first: `[[overrides]]`, because
+  replacing them would silently drop the overrides of the config a file extends (a child removes an
+  inherited glob with an `unset` entry, see Overrides), and `discover.extend_globs`, which adds to
+  `discover.globs` the way ruff's `extend-select` adds to `select` (a child that replaces `globs` keeps
+  every inherited `extend_globs`). The shipped presets carry no overrides: a path scope belongs to one
+  repository's layout.
 - Unknown keys, unknown rule ids and malformed allowlist entries fail the configuration (exit 2).
   A typo must not silently disable a check.
 
 ## File discovery
 
 Files are `git ls-files` entries matching `discover.globs` (default `AGENTS.md`, `**/AGENTS.md`,
-`CLAUDE.md`, `**/CLAUDE.md`), never a file ending in `.local.md`, skipping files deleted in the
+`CLAUDE.md`, `**/CLAUDE.md`) or `discover.extend_globs` (default none), never a file ending in `.local.md`, skipping files deleted in the
 working tree. Two discovered paths in the same directory that are the same file (for example
 `CLAUDE.md -> AGENTS.md`) are one file under two names, each loaded by a different agent: only the
 non-symlink path is analyzed (the first in sort order when all are symlinks), so no rule reports the
@@ -56,6 +59,13 @@ same text twice. The same file in another
 directory is a separate load location and is analyzed on its own; when it sits in an ancestor or
 descendant directory, an agent working there loads both, and R5a reports the repeated lines. A
 symlink to a file outside the discovered set is analyzed as its own file; a dangling one is skipped.
+
+`--no-git` replaces `git ls-files` with a walk of the current directory, which becomes the root
+(config lookup, reported paths); every walked file is what rules see as tracked. The walk never enters
+`.git`, `.hg`, `.svn`, `node_modules`, `.venv`, `venv`, `__pycache__`, `.tox`, `.mypy_cache`,
+`.pytest_cache`, `.ruff_cache`, `.cache`, `.direnv`, `.gradle`, `.next` or `.terraform` at any depth, does not follow directory symlinks, and does not read
+`.gitignore` (docs/adr/0006). Without the flag, running outside a git repository is still exit 2: the
+scan never switches scope on its own.
 File names given on the command line are not used to narrow the analysis: cross-file rules and the
 allowlist "no longer needed" check need the whole set, and a partial view would make them pass locally
 and fail in CI. Hooks therefore use `pass_filenames: false`.
@@ -107,7 +117,11 @@ per-file lines (`file-lines`), `R1c` combined bytes on a path (`path-bytes`) and
   translation, so bytes are the bytes on disk (a CRLF counts two) minus the blocks' raw bytes, the same
   unit R1c uses; lines are counted on the text outside the blocks; line length is in characters; a
   limit is exceeded when `measured > limit` (equal passes); a finding's line number is the line on
-  disk, where an annotation points. Other rules see the text with newlines normalized. A contract test
+  disk, where an annotation points. Other rules see the text with newlines normalized.
+- One line definition for every rule: only LF, CRLF and a lone CR end a line (`rules/_text.py`
+  `split_lines`), as `grep -n` and editors count them. Form feed, U+2028 and the other breaks
+  `str.splitlines` knows are characters inside a line, for R1b's count and for every reported line
+  number. A contract test
   compares R1a to R1d with the checker they replaced and lists the deliberate differences (CRLF bytes,
   line numbers after a block; docs/adr/0004).
 
@@ -164,21 +178,30 @@ the exception, its findings are always warnings.
 
 ## Overrides
 
-Each entry: `paths` (globs), `rules` (rule id or alias -> `warn` or `off`), `reason` (docs/adr/0004).
+Each entry: `paths` (globs), `rules` (rule id or alias -> level), `reason`, optional `raise`
+(docs/adr/0004, docs/adr/0006).
 
-- An override changes levels only, never rule parameters, and only lowers: `error` fails the
-  configuration. For one file and one rule the lowest of the rule level and every matching override
-  applies, so entry order does not matter. `E0` and `allowlist` cannot be overridden.
+- An override changes levels only, never rule parameters. Without `raise` it only lowers (`warn` or
+  `off`; `error` fails the configuration). With `raise = true` it only raises (`error` or `warn`; `off`
+  fails), from `off` too: the rule then runs, and its findings on the other files stay at the rule level
+  (dropped when that is `off`). For one file and one rule: when a lowering entry matches, the lowest of
+  the rule level and the matching lowering entries applies, whatever raising entries match (lowering
+  wins); otherwise the highest of the rule level and the matching raising entries. Entry order does not
+  matter. `E0`, `allowlist` and `disable` cannot be overridden.
+- An entry `{ unset = [globs], reason }` (no other keys) removes those globs from the overrides the
+  file inherits through `extends`; an inherited entry left with no glob is dropped. A glob that is in no
+  inherited entry fails the configuration. It does not touch the file's own entries. When one config
+  is inherited through two `extends` branches, a glob stays while any branch still inherits it.
 - It applies to the findings reported on the files it matches; those files stay in the input of
   cross-file rules (R1c still counts them, R5a and R5b still compare them), so a finding on a file
   outside the paths is still reported.
 - Overrides run before the allowlist: an allowlist entry for a finding an override drops is no longer
   needed.
-- Each glob of the config file the run loads directly (`.agentfile-lint.toml` or `--config`) must match
-  an analyzed instruction file; otherwise a warning (rule `allowlist`, whole file, on that config file:
-  repo-relative inside the repository, as given outside it, naming `overrides[i]` by its index in that
-  file). Entries reached through `extends` are not checked: a shared config serves repositories that do
-  not all have every path.
+- Each glob of an entry (after `unset`) must match an analyzed instruction file; otherwise a warning
+  (rule `allowlist`, whole file, on the config file that wrote the entry: repo-relative inside the
+  repository, as given outside it, naming `overrides[i]` by its index in that file). An entry reached
+  through `extends` says `(inherited through extends)` and points at `unset`: a shared config serves
+  repositories that do not all have every path, and each one removes what it does not have.
 - A same-directory alias (a `CLAUDE.md` symlink to `AGENTS.md`) is not analyzed, so an override names
   the target file; a glob that matches only the alias gets the stale warning.
 
@@ -197,7 +220,32 @@ Each entry: `rule`, `path`, `count`, `reason`, `expires` (docs/adr/0005).
 - Within `warn_days` (default 14) of expiry: warning "expires in N days".
 - `max_days` (default 90): an `expires` later than today plus `max_days` fails the configuration.
 - `max_entries` (default 10): more entries fail the configuration.
-- Renewal means editing the config and writing a new reason; there are no inline suppressions.
+- Renewal means editing the config and writing a new reason.
+
+## Per-line directives
+
+`<!-- agentfile-lint-disable-next-line <ids> -- <reason> -->` drops the findings of the named rules on
+the next line of the same file (docs/adr/0006).
+
+- The directive is a line of its own (up to three spaces of indent, as four make an indented code
+  block), outside fenced code and HTML comments, which every text rule skips the same way. Any such line
+  starting with `<!-- agentfile-lint-disable` is parsed as one.
+- One directive per target line: a directive right above another directive is an error, since it would
+  cover the directive line; name every rule in the one right above the target.
+- `<ids>`: one or more rule ids or aliases, separated by commas or spaces. A reason after ` -- ` is
+  required.
+- "Next line" counts lines the way every rule does: only LF, CRLF and a lone CR end a line.
+- It goes in the file that reports the finding: for R5a and R5b, the file with the repeated line, not
+  the ancestor or sibling it repeats.
+- Rules whose findings are about the whole file (R1a, R1b, R1c, C1) are not accepted; use an allowlist
+  entry or an override.
+- The directive is ordinary text for the other rules: it counts toward R1a, R1b, R1c and R1d.
+- Directives run after overrides and before the allowlist, so a suppressed finding does not count
+  toward an entry's `count`.
+- Pseudo rule `disable`: a malformed directive (no id, no reason, an unknown or retired id, a whole-file
+  rule, a stacked directive, or a line that starts like a directive but is not one) is an error on the
+  directive's line (exit 1; exit 2 stays for configuration errors); a rule a directive names with no finding of it on the next line is a
+  warning, also when the rule is off. No level or override changes `disable`.
 
 Because expiry depends on the date, a repository with no commits can turn red. Run CI on a
 weekly schedule so warnings appear before that happens.
@@ -219,9 +267,20 @@ Every finding goes to stdout, sorted by file, line, rule (docs/adr/0004).
   escaped like `escapeData` and `escapeProperty` in actions/toolkit `packages/core/src/command.ts`.
   The message is the text-format line, so a finding past GitHub's annotation limits (10 errors and 10
   warnings per step, 50 per job) keeps its location in the log. `action.yml` passes this format.
+- `--format sarif`: one SARIF 2.1.0 log (the version GitHub code scanning reads): one run, the tool
+  driver with a descriptor for every rule and pseudo rule, and one result per finding with `ruleId`,
+  `level` (`error` or `warning`), `message.text` and a physical location whose `uri` is the
+  percent-encoded relative path; `region.startLine` is omitted for a whole-file finding. The action
+  does not upload it (docs/adr/0006).
+
+The action's `working-directory` input only changes where it runs. Reported paths stay relative to
+the git root: the runner passes a relative `file=` through unchanged and GitHub reads it from the
+repository root (actions/runner `ActionCommandManager.cs`, `IssueCommandExtension`), and code scanning
+reads a relative SARIF `uri` the same way.
 
 The pseudo rule `E0` reports an instruction file that is not valid UTF-8; it is always on, and only an
-allowlist entry can exempt a file. Usage and configuration errors go to stderr (configuration
+allowlist entry can exempt a file; the pseudo rule `disable` reports per-line directives (Per-line
+directives). Usage and configuration errors go to stderr (configuration
 errors as `agentfile-lint: message`; argparse prints its own usage message). Exit `0`: no errors; `1`: at least one error; `2`: usage or configuration
 problem. `--warn-as-error` promotes warnings. The formats and exit codes are part of the
 contract; which version part a change to them needs is in `docs/versioning.md`.

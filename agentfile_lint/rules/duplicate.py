@@ -8,7 +8,8 @@ ancestor directory, as one agent loads them) or `any` (also different names, and
 directory). Every other pair is a sibling pair: R5b. Lines are grouped once: a line that repeats an
 ancestor is never also reported as a sibling duplicate, even with R5a off. Both ids read
 `[shared.duplicates]`. Exact matches only; the whole tracked instruction-file set is always compared,
-never just the files named on the command line.
+never just the files named on the command line, except the files `exclude` matches: those are left out
+of the comparison entirely (neither reported nor used as the ancestor text).
 """
 from __future__ import annotations
 
@@ -17,7 +18,8 @@ import re
 from typing import Any
 
 from ..context import Context
-from ..errors import ConfigError, check_keys, expect_bool, expect_int, expect_regex_list, require_keys
+from ..discover import matches
+from ..errors import ConfigError, check_keys, expect_bool, expect_int, expect_regex_list, expect_str_list, require_keys
 from ..finding import Finding
 from ._text import parent_dirs, prose_lines
 
@@ -25,28 +27,31 @@ CHECKS = (
     ("R5a", "ancestor-duplicates", "lines a file repeats from a file in an ancestor directory"),
     ("R5b", "sibling-duplicates", "lines repeated across files that are not ancestor and descendant"),
 )
-_KEYS = {"ancestor_pairs", "min_chars", "ignore_headings", "ignore_patterns"}
+_KEYS = {"ancestor_pairs", "min_chars", "ignore_headings", "ignore_patterns", "exclude"}
 SHARED = ("duplicates", _KEYS)
 _PAIRS = ("same-name", "any")
 _MARKER = re.compile(r"^(?:[-*+]|\d+[.)])\s+")
 _TABLE_RULE = re.compile(r"^\|?[\s:|-]+\|?$")
 _REMOVED = {
     "sibling_level": "removed in 0.7.0; sibling duplicates are R5b, with its own level (docs/adr/0005)",
-    **{key: "moved to [shared.duplicates] in 0.7.0 (docs/adr/0005)" for key in _KEYS},
+    # The 0.6 `[rules.R5]` keys; `exclude` is new in 0.8.0 and never lived there.
+    **{key: "moved to [shared.duplicates] in 0.7.0 (docs/adr/0005)" for key in _KEYS - {"exclude"}},
 }
 
 
-def validate(shared: dict[str, Any], tables: dict[str, dict[str, Any]]) -> dict[str, Any]:
+def validate(shared: dict[str, Any], tables: dict[str, dict[str, Any]]) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
     for rule_id, table in tables.items():
         check_keys(table, {"level"}, f"rules.{rule_id}", _REMOVED)
     where = "shared.duplicates"
     require_keys(shared, sorted(_KEYS), where)
-    return {
+    params = {
         "ancestor_pairs": _expect_pairs(shared["ancestor_pairs"], f"{where}.ancestor_pairs"),
         "min_chars": expect_int(shared["min_chars"], f"{where}.min_chars"),
         "ignore_headings": expect_bool(shared["ignore_headings"], f"{where}.ignore_headings"),
         "ignore_patterns": expect_regex_list(shared["ignore_patterns"], f"{where}.ignore_patterns"),
+        "exclude": expect_str_list(shared["exclude"], f"{where}.exclude", allow_empty=True),
     }
+    return params, {rule_id: {} for rule_id in tables}  # the parameters are all in [shared.duplicates]
 
 
 def _expect_pairs(value: Any, where: str) -> str:
@@ -76,6 +81,8 @@ def check_repo(ctx: Context, params: dict[str, Any], levels: dict[str, str]) -> 
     ignore = [re.compile(p) for p in params["ignore_patterns"]]
     groups: dict[str, dict[str, int]] = {}  # normalized line -> {path: first line number}
     for path, text in ctx.files.items():
+        if params["exclude"] and matches(path, params["exclude"]):
+            continue
         for number, raw in prose_lines(text):
             if params["ignore_headings"] and raw.lstrip().startswith("#"):
                 continue

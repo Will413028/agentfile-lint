@@ -134,9 +134,23 @@ class StaleGlobTest(unittest.TestCase):
         r = run({**TRANSLATED, ".agentfile-lint.toml": first + self.TOML.replace('"docs/**", ', "")})
         self.assertIn("overrides[1]: glob 'gone/**'", r.stdout)
 
-    def test_inherited_entries_are_not_checked(self):
+    def test_inherited_entries_are_checked_on_the_file_that_wrote_them(self):
         r = run({**TRANSLATED, ".agentfile-lint.toml": 'extends = ["shared.toml"]\n', "shared.toml": self.TOML})
-        self.assertEqual((r.returncode, r.stdout), (0, ""), r.stderr)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(
+            r.stdout,
+            "shared.toml: warning: allowlist: overrides[0] (inherited through extends): glob 'gone/**' matches no "
+            "analyzed instruction file; remove it there, or unset it in the config that extends it\n",
+        )
+
+    def test_unset_removes_the_inherited_glob(self):
+        own = 'extends = ["shared.toml"]\n[[overrides]]\nunset = ["gone/**"]\nreason = "no gone/ here"\n'
+        r = run({**TRANSLATED, ".agentfile-lint.toml": STRICT.replace('"]', '", "shared.toml"]') + own[len('extends = ["shared.toml"]\n'):],
+                 "shared.toml": 'extends = []\n' + self.TOML})
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn("allowlist", r.stdout)  # no stale warning
+        self.assertTrue(r5(r.stdout.splitlines()), r.stdout)  # strict reports pkg/AGENTS.md ...
+        self.assertFalse([line for line in r.stdout.splitlines() if line.startswith("docs/")], r.stdout)  # ... docs/** still off
 
     def test_config_outside_repo_is_named_as_given(self):
         outside = helpers.make_repo({"lint.toml": self.TOML})
@@ -166,7 +180,89 @@ class ExtendsTest(unittest.TestCase):
         self.assertFalse([line for line in r5(warnings + errors) if line.startswith("docs/")], r.stdout)
 
 
+class RaiseTest(unittest.TestCase):
+    """D18 (docs/adr/0006): `raise = true` raises a level, from `off` too; lowering wins over raising."""
+    RAISE = '[[overrides]]\npaths = ["docs/**"]\nrules = {{ R5b = "{level}" }}\nraise = true\nreason = "r"\n'
+
+    def test_raise_turns_an_off_rule_on_for_the_path_only(self):
+        r = run({**TRANSLATED, ".agentfile-lint.toml": self.RAISE.format(level="warn")})
+        warnings, errors = helpers.by_severity(r)
+        self.assertEqual([w.split(":")[0] for w in r5(warnings)], ["docs/zh/AGENTS.md"] * 3, r.stdout)
+        self.assertFalse(r5(errors), r.stdout)
+        self.assertEqual(r.returncode, 0)
+
+    def test_raise_to_error_fails(self):
+        r = run({**TRANSLATED, ".agentfile-lint.toml": self.RAISE.format(level="error")})
+        _, errors = helpers.by_severity(r)
+        self.assertEqual({e.split(":")[0] for e in r5(errors)}, {"docs/zh/AGENTS.md"}, r.stdout)
+        self.assertEqual(r.returncode, 1)
+
+    def test_without_raise_an_entry_never_raises(self):
+        r = run({**TRANSLATED, ".agentfile-lint.toml": OFF_DOCS.format(rules='R5b = "warn"')})
+        self.assertEqual((r.returncode, r.stdout), (0, ""), r.stderr)
+
+    def test_lowering_wins_over_raising(self):
+        off = '[[overrides]]\npaths = ["docs/zh/*"]\nrules = { R5b = "off" }\nreason = "b"\n'
+        for toml in (self.RAISE.format(level="error") + off, off + self.RAISE.format(level="error")):
+            r = run({**TRANSLATED, ".agentfile-lint.toml": toml})
+            self.assertEqual((r.returncode, r.stdout), (0, ""), toml)
+
+    def test_raise_shows_in_effective_config(self):
+        r = config_json(self.RAISE.format(level="warn"))
+        self.assertEqual(json.loads(r.stdout)["overrides"],
+                         [{"paths": ["docs/**"], "rules": {"R5b": "warn"}, "reason": "r", "raise": True}])
+
+
+class NewKeyValidationTest(ValidationTest):
+    def test_raise_must_be_a_bool(self):
+        self.assert_config_error(OFF_DOCS.format(rules='R5b = "off"') + 'raise = "yes"\n', "overrides[0].raise")
+
+    def test_raise_entry_cannot_lower_to_off(self):
+        self.assert_config_error(OFF_DOCS.format(rules='R5b = "off"') + 'raise = true\n', "overrides[0].rules.R5b")
+
+    def test_unset_must_be_a_list_with_a_reason(self):
+        parent = {"s.toml": 'extends = []\n' + OFF_DOCS.format(rules='R5b = "off"')}
+        for own, needle in (('unset = "docs/**"\nreason = "r"\n', "unset"), ('unset = ["docs/**"]\n', "reason"),
+                            ('unset = ["docs/**"]\nreason = "r"\nrules = { R5b = "off" }\n', "rules"),
+                            ('unset = ["nope/**"]\nreason = "r"\n', "'nope/**' is not a glob of any inherited override")):
+            root = helpers.make_repo({"AGENTS.md": "ok\n", **parent,
+                                      ".agentfile-lint.toml": 'extends = ["preset:default", "s.toml"]\n[[overrides]]\n' + own})
+            r = helpers.run_new(root, "config")
+            self.assertEqual(r.returncode, 2, own)
+            self.assertIn(".agentfile-lint.toml: overrides[0]", r.stderr)
+            self.assertIn(needle, r.stderr)
+
+    def test_unset_of_every_glob_drops_the_entry(self):
+        root = helpers.make_repo({"AGENTS.md": "ok\n", "s.toml": 'extends = []\n' + OFF_DOCS.format(rules='R5b = "off"'),
+                                  ".agentfile-lint.toml": 'extends = ["preset:default", "s.toml"]\n[[overrides]]\nunset = ["docs/**"]\nreason = "r"\n'})
+        r = helpers.run_new(root, "config")
+        self.assertEqual(json.loads(r.stdout)["overrides"], [], r.stderr)
+
+
 class ReviewFixesTest(unittest.TestCase):
+    def test_inherited_stale_warning_names_the_file_relative_to_its_parent(self):
+        root = helpers.make_repo({
+            **TRANSLATED, ".agentfile-lint.toml": 'extends = ["shared/base.toml"]\n',
+            "shared/base.toml": 'extends = ["team.toml"]\n',
+            "shared/team.toml": '[[overrides]]\npaths = ["gone/**"]\nrules = { R5b = "off" }\nreason = "r"\n',
+        })
+        r = helpers.run_new(root)
+        self.assertTrue(r.stdout.startswith("shared/team.toml: warning: allowlist: overrides[0] (inherited"), r.stdout)
+
+    def test_diamond_unset_on_one_branch_keeps_the_other_branch_whatever_the_order(self):
+        d = '[[overrides]]\npaths = ["docs/**", "pkg/**"]\nrules = { R5b = "off" }\nreason = "d"\n'
+        b = 'extends = ["d.toml"]\n[[overrides]]\nunset = ["docs/**"]\nreason = "b"\n'
+        for order in ('"b.toml", "c.toml"', '"c.toml", "b.toml"'):
+            root = helpers.make_repo({**TRANSLATED, "d.toml": d, "b.toml": b, "c.toml": 'extends = ["d.toml"]\n',
+                                      ".agentfile-lint.toml": f"extends = [{order}]\n"})
+            r = helpers.run_new(root, "config")
+            self.assertEqual([o["paths"] for o in json.loads(r.stdout)["overrides"]], [["docs/**", "pkg/**"]], order)
+
+    def test_top_level_extend_globs_fails(self):
+        r = config_json('extend_globs = ["GEMINI.md"]\n')
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("extend_globs belongs in [discover]", r.stderr)
+
     def test_inherited_error_names_its_file(self):
         root = helpers.make_repo({"AGENTS.md": "ok\n", ".agentfile-lint.toml": 'extends = ["shared.toml"]\n',
                                   "shared.toml": '[[overrides]]\npaths = ["docs/**"]\nrules = { R5b = "off" }\n'})

@@ -57,6 +57,7 @@ services/api/AGENTS.md:5: warning: R6: possible copied constant '`MAX_RETRIES = 
 | `R6` | off | warn | candidates for constants copied from code (heuristic, always a warning) |
 | `C1` | off | warn | `CLAUDE.md` is only the line `@AGENTS.md` (`import-only`) or absent (`forbid`) |
 | `allowlist` | error | error | exceptions: expired, no-longer-needed or miscounted (`count` above or below the findings) allowlist entries fail, entries warn before they expire; an override glob that matches no file warns |
+| `disable` | error | error | per-line directives: a malformed one fails, one that suppresses nothing warns |
 
 Every rule except `R1a` and `R1c` ships at `warn` or `off`; raise a rule to `error` in your own config once it is
 clean. Why each rule exists, where its default comes from and its measured false-positive rate:
@@ -65,15 +66,14 @@ how that changed from 0.4.0: [`docs/field-report.md`](docs/field-report.md).
 
 ### Other instruction files
 
-The default checks `AGENTS.md` and `CLAUDE.md` only. To add others, list them in `[discover] globs`:
+The default checks `AGENTS.md` and `CLAUDE.md` only. To add others, list them in `[discover] extend_globs`:
 
 ```toml
 [discover]
-globs = ["AGENTS.md", "**/AGENTS.md", "CLAUDE.md", "**/CLAUDE.md",
-         "GEMINI.md", "**/GEMINI.md", ".github/copilot-instructions.md"]
+extend_globs = ["GEMINI.md", "**/GEMINI.md", ".github/copilot-instructions.md"]
 ```
 
-- The list replaces the default list, so repeat the four `AGENTS.md` / `CLAUDE.md` globs.
+- `extend_globs` adds to the default list; `globs` replaces it. `extend_globs` from `extends` files add up.
 - With `preset:strict`, R5a compares files of different names too, so a `GEMINI.md` that copies the
   `AGENTS.md` next to it is reported line by line. The default compares only same-name files.
 
@@ -87,7 +87,7 @@ documented" means the documentation does not say, not that the feature is missin
 | Runs on | Python 3.11+, standard library only | Rust binary (npm, brew, pip, cargo) | Node (`npx`), no runtime dependencies | Node 18+ (`npx`) |
 | Files | `AGENTS.md`, `CLAUDE.md`; others by glob | `CLAUDE.md`, `AGENTS.md`, `SKILL.md`, hooks, MCP, Cursor, Copilot, more | context files of 16 tools, MCP config | `CLAUDE.md`, `AGENTS.md`, `SKILL.md`, Cursor, Copilot, more |
 | Shared config | `extends` presets and files | `extend` base files | not documented | `extends` of the built-in preset |
-| Exceptions | allowlist entries need a reason and an expiry date, expired or unneeded entries fail; path overrides only lower a level and need a reason | disabled rules, per-file overrides, inline comments | ignored rules with an optional reason; unused ones reported | ignored paths |
+| Exceptions | allowlist entries need a reason and an expiry date, expired or unneeded entries fail; path overrides need a reason and raise a level only with `raise = true`; per-line directives need a reason, unused ones warn | disabled rules, per-file overrides, inline comments | ignored rules with an optional reason; unused ones reported | ignored paths |
 | Vendored copy | reproducible directory with a hash check | not documented | not documented | not documented |
 | References checked | test names, `§N` spec sections; paths with `preset:strict` | import paths, commands, referenced files | paths, commands (against `package.json`, `Makefile`) | file references, imports |
 | Duplicates between files | identical lines in a file and its ancestors | not documented | duplicate content across files | duplicate content; across files not documented |
@@ -104,11 +104,12 @@ and verified, and the output and exit codes are a tested contract.
 
 ```sh
 python3 -m agentfile_lint            # from a git repository; analyzes tracked files only
+agentfile-lint --no-git              # walk the current directory instead (no git needed)
 agentfile-lint --list-rules          # rules and their effective levels
 agentfile-lint --today 2026-01-31    # replace the current date (reproducible runs)
 agentfile-lint --config path.toml    # explicit config instead of .agentfile-lint.toml
 agentfile-lint --warn-as-error
-agentfile-lint --format json         # or github (workflow commands); default text
+agentfile-lint --format json         # or github (workflow commands) or sarif; default text
 ```
 
 Other commands:
@@ -126,12 +127,14 @@ Findings go to stdout, one line each: `file:line: severity: rule-id: message`, w
 `error` or `warning`; a finding about a whole file has no line: `file: severity: rule-id: message`.
 `--format json` prints one document, `{"version": 1, "findings": [...]}`, each finding with `file`,
 `line` (`null` for a whole file), `level`, `rule` and `message`; `--format github` prints GitHub
-workflow commands. Usage and configuration problems go to stderr. Exit codes: `0` no errors, `1` at
+workflow commands; `--format sarif` prints one SARIF 2.1.0 log for code scanning. Usage and configuration problems go to stderr. Exit codes: `0` no errors, `1` at
 least one error, `2` usage or configuration problem.
 
 Files given on the command line are ignored; the full tracked set is always analyzed
 (cross-file checks and allowlist checks need it). Untracked local instruction
-files (`*.local.md`) are never analyzed.
+files (`*.local.md`) are never analyzed. `--no-git` analyzes every file under the current directory
+instead, with the same globs; it skips `.git`, `node_modules`, virtual environments and tool caches by
+a fixed list and does not read `.gitignore`.
 
 ## Configuration
 
@@ -172,14 +175,32 @@ expires = 2026-12-31
 # Permanent path scope: translated copies duplicate the root file on purpose.
 [[overrides]]
 paths = ["docs/*/AGENTS.md"]
-rules = { ancestor-duplicates = "off" }  # rule id or alias -> "warn" or "off"; never raises a level
+rules = { ancestor-duplicates = "off" }  # rule id or alias -> "warn" or "off"
 reason = "translations of the root AGENTS.md"
+
+# Raising takes `raise = true`: here R5b, off by default, is a warning under services/.
+[[overrides]]
+paths = ["services/**"]
+rules = { R5b = "warn" }                 # with raise = true: "error" or "warn"
+raise = true
+reason = "service guides must not copy each other"
 ```
 
 The allowlist is for debt with an end date; `[[overrides]]` is for paths that are meant to differ.
-An override only lowers a rule's level (the lowest of the rule and every matching override wins), and
-entries from `extends` are added to the repository's own. A glob in your config that matches no
-instruction file is a warning.
+An override only lowers a rule's level unless it says `raise = true`; when entries that lower and
+entries that raise both match a file, lowering wins. Entries from `extends` are added to the
+repository's own; `[[overrides]] unset = ["docs/**"]` (with a `reason`) removes an inherited glob. A
+glob that matches no instruction file is a warning on the config file that wrote it.
+
+A single line can be exempted in the file itself, with the rule ids and a required reason:
+
+```markdown
+<!-- agentfile-lint-disable-next-line R5a -- the tool reads this file alone -->
+Run make check before every push.
+```
+
+It covers the next line only and not the whole-file rules (`R1a`, `R1b`, `R1c`, `C1`); a directive that
+suppresses nothing is a warning, a malformed one an error.
 
 ## Install and wire up
 
@@ -222,6 +243,28 @@ on:
 
 The action runs with `--format github`, so findings appear as annotations on the pull request. GitHub
 shows at most 10 errors and 10 warnings per step; the others stay in the log with their file and line.
+When the repository is checked out to a subdirectory, set `working-directory: <dir>`; `config` is then
+relative to it, and annotations still point at the right file.
+
+Code scanning: the action does not upload anything. To see findings as code scanning alerts, write
+SARIF and upload it yourself (the upload needs `security-events: write`):
+
+```yaml
+permissions:
+  contents: read
+  security-events: write
+# steps:
+- uses: actions/checkout@<sha>
+- uses: actions/setup-python@<sha>
+  with:
+    python-version: "3.12"
+- run: python -m pip install agentfile-lint==<version>
+- run: agentfile-lint --format sarif > agentfile-lint.sarif || [ $? -eq 1 ]   # findings still upload
+- uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+  with:
+    sarif_file: agentfile-lint.sarif
+    category: agentfile-lint
+```
 
 `R2` and `R3c` need configuration to check anything (section lists, spec mappings); the preset
 documents every key. A rule at `error` can still emit some findings as warnings.

@@ -20,7 +20,12 @@ DESCRIPTION = "test names referenced in backticks exist in the repository"
 CHECKS = ((ID, NAME, DESCRIPTION),)
 
 
-def validate(shared: None, tables: dict[str, dict[str, Any]]) -> dict[str, Any]:
+def validate(shared: None, tables: dict[str, dict[str, Any]]) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    params = _params(tables)
+    return params, {ID: params}
+
+
+def _params(tables: dict[str, dict[str, Any]]) -> dict[str, Any]:
     params = tables[ID]
     where = f"rules.{ID}"
     check_keys(params, {"level", "test_defs"}, where)

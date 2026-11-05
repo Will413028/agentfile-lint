@@ -1,7 +1,8 @@
 """Command line entry point.
 
 Output: every finding on stdout, by default one line each, `file:line: severity: rule-id: message`
-(`file: severity: rule-id: message` for a whole-file finding); `--format json|github` in `finding.py`.
+(`file: severity: rule-id: message` for a whole-file finding); `--format json|github` in `finding.py`,
+`--format sarif` in `sarif.py`.
 Usage and config problems go to stderr. Exit codes: 0 no errors (warnings allowed), 1 at least one
 error, 2 usage or config problem.
 """
@@ -20,22 +21,29 @@ from pathlib import Path
 
 from . import __version__
 from . import config as config_mod
-from . import discover, engine
+from . import discover, engine, sarif
 from .errors import ConfigError
-from .finding import INPUT_RULE, RENDERERS, dump_json
+from .engine import PSEUDO_RULES
+from .finding import RENDERERS, dump_json
 from .rules import DESCRIPTIONS, NAMES, RULES
+
+
+# `--format` value -> renderer; SARIF lives outside `finding.py` because it needs the rule table.
+FORMATS = {**RENDERERS, "sarif": sarif.render}
 
 
 def _parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="agentfile-lint", description="Lint agent instruction files.")
-    p.add_argument("files", nargs="*", help="only decides whether to run; the full tracked set is always analyzed")
+    p.add_argument("files", nargs="*", help="only decides whether to run; the full file set is always analyzed")
     p.add_argument("--config", help=f"config file (default: {config_mod.CONFIG_NAME} at the repo root, if present)")
     p.add_argument("--today", help="YYYY-MM-DD, replaces the current date (reproducible runs)")
     p.add_argument("--version", action="version", version=f"agentfile-lint {__version__}")
     p.add_argument("--list-rules", action="store_true", help="print the rules and their effective levels, then exit")
     p.add_argument("--warn-as-error", action="store_true", help="treat warnings as errors")
-    p.add_argument("--format", choices=list(RENDERERS), default="text",
-                   help="output format for findings: text (default), json, or github (workflow commands)")
+    p.add_argument("--format", choices=list(FORMATS), default="text",
+                   help="output format for findings: text (default), json, github (workflow commands) or sarif (2.1.0)")
+    p.add_argument("--no-git", action="store_true",
+                   help="walk the current directory instead of listing git-tracked files (skips .git, node_modules and similar)")
     return p
 
 
@@ -101,12 +109,15 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     cwd = Path.cwd()
     try:
-        try:
-            root = discover.repo_root(cwd)
-        except discover.DiscoverError:
-            if not args.list_rules:
-                raise
-            root = None
+        if args.no_git:
+            root = cwd
+        else:
+            try:
+                root = discover.repo_root(cwd)
+            except discover.DiscoverError:
+                if not args.list_rules:
+                    raise
+                root = None
         cfg_path = Path(args.config) if args.config else None
         if cfg_path is None:
             cfg_path = config_mod.default_config_path(root)
@@ -118,15 +129,19 @@ def main(argv: list[str] | None = None) -> int:
     if args.list_rules:
         for rule_id in RULES:
             print(f"{rule_id}  {cfg.rules[rule_id]['level']:<5}  {NAMES[rule_id]}: {DESCRIPTIONS[rule_id]}")
-        print("allowlist  error  expired, no-longer-needed or miscounted allowlist entries; warns before expiry and on an override glob that matches no file (always on)")
-        print(f"{INPUT_RULE}  error  instruction file is not valid UTF-8; only an allowlist entry can exempt it (always on)")
+        for rule_id, text in PSEUDO_RULES.items():
+            print(f"{rule_id}  error  {text}")
         return 0
 
     findings = []
-    if not args.files or _relevant(args.files, root, cwd, cfg.globs):
-        findings = engine.analyze(root, cfg, today, args.warn_as_error)
+    if not args.files or _relevant(args.files, root, cwd, cfg.all_globs):
+        try:
+            findings = engine.analyze(root, cfg, today, args.warn_as_error, use_git=not args.no_git)
+        except discover.DiscoverError as exc:  # an unreadable directory in the --no-git walk
+            sys.stderr.write(f"agentfile-lint: {exc}\n")
+            return 2
     if hasattr(sys.stdout, "reconfigure"):  # findings quote file text; a cp1252 pipe must not crash
         sys.stdout.reconfigure(encoding="utf-8")
-    sys.stdout.write(RENDERERS[args.format](findings))  # an irrelevant run still prints valid JSON
+    sys.stdout.write(FORMATS[args.format](findings))  # an irrelevant run still prints valid JSON
     sys.stdout.flush()
     return 1 if any(f.level == "error" for f in findings) else 0

@@ -6,7 +6,13 @@ finding, all on stdout. `--format json` and `--format github` carry the same fin
 from __future__ import annotations
 
 import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
 import unittest
+from pathlib import Path
 
 import helpers
 from agentfile_lint.finding import Finding, format_github
@@ -60,7 +66,7 @@ class TextFormatTest(unittest.TestCase):
             self.assertIn(line[:20].encode("utf-8"), r.stdout, fmt)  # R5a quotes the start of the line
 
     def test_unknown_format_is_a_usage_error(self):
-        r = run(FILES, "--format", "sarif")
+        r = run(FILES, "--format", "xml")
         self.assertEqual((r.returncode, r.stdout), (2, ""))
         self.assertIn("--format", r.stderr)
 
@@ -124,6 +130,47 @@ class GithubFormatTest(unittest.TestCase):
     def test_action_passes_format_github(self):
         text = (helpers.REPO / "action.yml").read_text(encoding="utf-8")
         self.assertIn("args=(--format github)", text)
+
+    def test_action_working_directory_is_an_input_and_the_run_step_uses_it(self):
+        # No YAML parser in the standard library: check the lines that carry the meaning.
+        lines = (helpers.REPO / "action.yml").read_text(encoding="utf-8").splitlines()
+        setup = lines.index(next(x for x in lines if "actions/setup-python@" in x))
+        self.assertEqual(lines[setup + 1:setup + 3], ["      with:", "        python-version: ${{ inputs.python-version }}"])
+        self.assertEqual([x.strip() for x in lines if "working-directory:" in x],
+                         ["working-directory:", "working-directory: ${{ inputs.working-directory }}"])
+        self.assertIn("  working-directory:", lines)  # an input, at the inputs level
+
+
+class ActionRunScriptTest(unittest.TestCase):
+    """The action's `run:` script, executed by bash the way the runner does, inside a repository checked
+    out to `$GITHUB_WORKSPACE/sub`: paths stay relative to the git root, as GitHub reads `file=`."""
+
+    @staticmethod
+    def script() -> str:
+        lines = (helpers.REPO / "action.yml").read_text(encoding="utf-8").splitlines()
+        start = lines.index("      run: |") + 1
+        return "\n".join(x[8:] for x in lines[start:] if x.startswith("        ") or not x.strip())
+
+    def run_in(self, workspace: Path, cwd: Path) -> str:
+        shim = Path(tempfile.mkdtemp(prefix="il-shim-"))  # the runner's `python` is setup-python's
+        (shim / "python").symlink_to(sys.executable)
+        env = dict(os.environ, PATH=f"{shim}{os.pathsep}{os.environ['PATH']}", GITHUB_WORKSPACE=str(workspace),
+                   IL_ACTION_PATH=str(helpers.REPO), IL_CONFIG="")
+        r = subprocess.run(["bash", "-e", "-c", self.script()], cwd=cwd, env=env, capture_output=True, text=True)
+        self.assertEqual(r.stderr, "")
+        return r.stdout
+
+    def test_checkout_in_a_subdirectory_reports_paths_from_the_git_root(self):
+        workspace = Path(tempfile.mkdtemp(prefix="il-ws-"))
+        repo = helpers.make_repo({"AGENTS.md": SHARED + "\n", "a/AGENTS.md": SHARED + "\n"})
+        shutil.move(str(repo), workspace / "sub")
+        out = self.run_in(workspace, workspace / "sub")  # the step's working-directory
+        self.assertIn("::warning file=a/AGENTS.md,line=1,title=R5a::a/AGENTS.md:1:", out)
+
+    def test_subdirectory_of_the_workspace_repo_reports_paths_from_the_git_root(self):
+        repo = helpers.make_repo({"AGENTS.md": SHARED + "\n", "a/AGENTS.md": SHARED + "\n"})
+        out = self.run_in(repo, repo / "a")
+        self.assertIn("::warning file=a/AGENTS.md,line=1,title=R5a::", out)
 
 
 class InputRuleTest(unittest.TestCase):

@@ -5,6 +5,58 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-05
+
+### Changed (breaking)
+
+- Override globs inherited through `extends` that match no analyzed instruction file are now a warning
+  too, on the file that wrote them, naming `unset` as the fix (before, only the config the run loaded
+  directly was checked). With `--warn-as-error` a shared config listing paths a repository lacks now
+  fails until that repository unsets them.
+- Lines are only ended by LF, CRLF or a lone CR, the way `grep -n` and editors count them. R1b's line
+  count and the line numbers every rule reports no longer treat form feed, U+2028 or the other
+  Unicode line breaks as line ends; a file with those characters may now report fewer lines and lower
+  line numbers. Files without them are unchanged.
+
+### Added
+
+- `--format sarif` prints one SARIF 2.1.0 log for GitHub code scanning; the README shows how to upload
+  it with `github/codeql-action/upload-sarif`. The action does not upload it.
+- `--no-git` walks the current directory instead of listing git-tracked files, skipping `.git`,
+  `node_modules` and similar directories by a fixed list; `.gitignore` is not read. The default is
+  unchanged.
+- Action input `working-directory` (default `.`) for a repository checked out to a subdirectory:
+  `config` is relative to it and annotations point at the right file. Existing inputs are unchanged.
+
+- `[discover] extend_globs` adds globs to `globs` instead of replacing them; the lists add up along
+  `extends`.
+- `[shared.duplicates] exclude` leaves files out of the R5a and R5b comparison entirely: an excluded
+  file is neither reported nor used as the ancestor text. Both presets set `exclude = []`.
+- `[[overrides]]` entries with `raise = true` raise a level (`error` or `warn`), from `off` too;
+  entries without it still only lower, and lowering wins when both match a file (docs/adr/0006).
+- `[[overrides]] unset = [globs]` with a `reason` removes globs from the overrides a config inherits
+  through `extends`.
+- Per-line directives `<!-- agentfile-lint-disable-next-line <ids> -- <reason> -->` drop the named
+  rules' findings on the next line (docs/adr/0006). Ids and a reason are required; whole-file rules
+  (`R1a`, `R1b`, `R1c`, `C1`) are not accepted. Suppressed findings do not count toward an allowlist
+  entry's `count`.
+
+### Changed
+
+- `config --format json` adds `discover.extend_globs`, `shared.duplicates.exclude` and, on an override
+  with `raise = true`, `"raise": true`; every 0.7.0 key is unchanged.
+- `config --format json` prints the effective table each rule module returns from validation, the same
+  `Config.rules` the engine reads levels from, so a defaulted key would show up for every id. The output
+  of the default and strict presets is unchanged (a test compares it with the 0.7.0 output).
+- `check-pins` numbers lines the same way.
+- New pseudo rule `disable`, like `allowlist` outside every preset and every level setting: a malformed
+  directive is an error (exit 1), a directive that suppresses nothing a warning. A line that starts with
+  `<!-- agentfile-lint-disable` is now checked, so a repository with such a comment may see new findings.
+
+### Fixed
+
+- R1b no longer loses a line when a lone CR ends the line before an excluded block and an LF follows it.
+
 ## [0.7.0] - 2026-11-05
 
 ### Changed (breaking)

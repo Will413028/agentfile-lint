@@ -42,9 +42,9 @@ def expect_str(value: Any, where: str) -> str:
     return value
 
 
-def expect_str_list(value: Any, where: str) -> list[str]:
-    if not isinstance(value, list) or not value:
-        raise ConfigError(f"{where}: expected a non-empty list of strings")
+def expect_str_list(value: Any, where: str, allow_empty: bool = False) -> list[str]:
+    if not isinstance(value, list) or not (value or allow_empty):
+        raise ConfigError(f"{where}: expected a {'' if allow_empty else 'non-empty '}list of strings")
     return [expect_str(v, f"{where}[{i}]") for i, v in enumerate(value)]
 
 
