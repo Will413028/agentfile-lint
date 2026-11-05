@@ -26,6 +26,10 @@ versions follow [Semantic Versioning](https://semver.org/).
   entries without it still only lower, and lowering wins when both match a file (docs/adr/0006).
 - `[[overrides]] unset = [globs]` with a `reason` removes globs from the overrides a config inherits
   through `extends`.
+- Per-line directives `<!-- agentfile-lint-disable-next-line <ids> -- <reason> -->` drop the named
+  rules' findings on the next line (docs/adr/0006). Ids and a reason are required; whole-file rules
+  (`R1a`, `R1b`, `R1c`, `C1`) are not accepted. Suppressed findings do not count toward an allowlist
+  entry's `count`.
 
 ### Changed
 
@@ -35,6 +39,9 @@ versions follow [Semantic Versioning](https://semver.org/).
   `Config.rules` the engine reads levels from, so a defaulted key would show up for every id. The output
   of the default and strict presets is unchanged (a test compares it with the 0.7.0 output).
 - `check-pins` numbers lines the same way.
+- New pseudo rule `disable`, like `allowlist` outside every preset and every level setting: a malformed
+  directive is an error (exit 1), a directive that suppresses nothing a warning. A line that starts with
+  `<!-- agentfile-lint-disable` is now checked, so a repository with such a comment may see new findings.
 
 ### Fixed
 

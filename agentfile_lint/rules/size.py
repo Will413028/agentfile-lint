@@ -26,6 +26,8 @@ CHECKS = (
     ("R1c", "path-bytes", "combined bytes of a file and the same-glob files in its ancestor directories"),
     ("R1d", "line-length", "characters per line"),
 )
+# Ids whose findings are about a whole file (line 0); a per-line directive cannot name them.
+WHOLE_FILE = ("R1a", "R1b", "R1c")
 SHARED = ("size", {"excluded_blocks"})
 
 _LIMIT_KEY = {"R1a": "max_bytes", "R1b": "max_lines", "R1c": "max_bytes"}

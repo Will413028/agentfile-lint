@@ -57,6 +57,7 @@ services/api/AGENTS.md:5: warning: R6: possible copied constant '`MAX_RETRIES = 
 | `R6` | off | warn | candidates for constants copied from code (heuristic, always a warning) |
 | `C1` | off | warn | `CLAUDE.md` is only the line `@AGENTS.md` (`import-only`) or absent (`forbid`) |
 | `allowlist` | error | error | exceptions: expired, no-longer-needed or miscounted (`count` above or below the findings) allowlist entries fail, entries warn before they expire; an override glob that matches no file warns |
+| `disable` | error | error | per-line directives: a malformed one fails, one that suppresses nothing warns |
 
 Every rule except `R1a` and `R1c` ships at `warn` or `off`; raise a rule to `error` in your own config once it is
 clean. Why each rule exists, where its default comes from and its measured false-positive rate:
@@ -86,7 +87,7 @@ documented" means the documentation does not say, not that the feature is missin
 | Runs on | Python 3.11+, standard library only | Rust binary (npm, brew, pip, cargo) | Node (`npx`), no runtime dependencies | Node 18+ (`npx`) |
 | Files | `AGENTS.md`, `CLAUDE.md`; others by glob | `CLAUDE.md`, `AGENTS.md`, `SKILL.md`, hooks, MCP, Cursor, Copilot, more | context files of 16 tools, MCP config | `CLAUDE.md`, `AGENTS.md`, `SKILL.md`, Cursor, Copilot, more |
 | Shared config | `extends` presets and files | `extend` base files | not documented | `extends` of the built-in preset |
-| Exceptions | allowlist entries need a reason and an expiry date, expired or unneeded entries fail; path overrides need a reason and raise a level only with `raise = true` | disabled rules, per-file overrides, inline comments | ignored rules with an optional reason; unused ones reported | ignored paths |
+| Exceptions | allowlist entries need a reason and an expiry date, expired or unneeded entries fail; path overrides need a reason and raise a level only with `raise = true`; per-line directives need a reason, unused ones warn | disabled rules, per-file overrides, inline comments | ignored rules with an optional reason; unused ones reported | ignored paths |
 | Vendored copy | reproducible directory with a hash check | not documented | not documented | not documented |
 | References checked | test names, `§N` spec sections; paths with `preset:strict` | import paths, commands, referenced files | paths, commands (against `package.json`, `Makefile`) | file references, imports |
 | Duplicates between files | identical lines in a file and its ancestors | not documented | duplicate content across files | duplicate content; across files not documented |
@@ -187,6 +188,16 @@ An override only lowers a rule's level unless it says `raise = true`; when entri
 entries that raise both match a file, lowering wins. Entries from `extends` are added to the
 repository's own; `[[overrides]] unset = ["docs/**"]` (with a `reason`) removes an inherited glob. A
 glob that matches no instruction file is a warning on the config file that wrote it.
+
+A single line can be exempted in the file itself, with the rule ids and a required reason:
+
+```markdown
+<!-- agentfile-lint-disable-next-line R5a -- the tool reads this file alone -->
+Run make check before every push.
+```
+
+It covers the next line only and not the whole-file rules (`R1a`, `R1b`, `R1c`, `C1`); a directive that
+suppresses nothing is a warning, a malformed one an error.
 
 ## Install and wire up
 

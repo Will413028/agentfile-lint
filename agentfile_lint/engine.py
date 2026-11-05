@@ -5,7 +5,7 @@ import datetime
 from dataclasses import replace
 from pathlib import Path
 
-from . import allowlist, discover, overrides
+from . import allowlist, disable, discover, overrides
 from .config import Config
 from .context import Context
 from .finding import INPUT_RULE, Finding
@@ -49,6 +49,8 @@ def analyze(root: Path, config: Config, today: datetime.date, warn_as_error: boo
             level = _level(overrides.level_for(f.path, f.rule, base[f.rule], config.overrides), f)
             if level != "off":
                 findings.append(replace(f, level=level))
+    # Per-line directives before the allowlist: a suppressed finding never counts toward an entry's count.
+    findings = disable.apply(findings, ctx.files)
     findings = allowlist.apply(findings, config.entries, config.allowlist, set(paths), today)
     findings += overrides.stale(config.overrides, set(paths), root)
     if warn_as_error:

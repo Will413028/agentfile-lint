@@ -39,3 +39,36 @@ Consequences:
 - `discover.extend_globs` and `[shared.duplicates] exclude` are added in the same release: the first
   concatenates along `extends` like overrides do, the second removes files from the R5a and R5b input,
   which an override (which only changes levels on the files it matches) cannot do.
+
+## Per-line directives
+
+ADR 0004 (decision 6) kept inline suppression rejected because a comment has no expiry date and scatters
+exceptions over the files, and named single-line reports as the trigger to reconsider. Per-line
+suppression is one of the features users of similar linters expect (Context), and the config has no
+tool for one line short of a time-boxed allowlist entry or an override for the whole path.
+
+Options:
+
+- A: `<!-- agentfile-lint-disable-next-line <ids> -- <reason> -->` only (markdownlint's
+  `disable-next-line`, ESLint's `-- description` and `--report-unused-disable-directives`); ids and a
+  reason required; whole-file rules not accepted.
+- B: A plus `disable` / `enable` blocks. A forgotten `enable` silences the rest of the file and needs a
+  check of its own.
+- C: A without a required reason, unlike every other exception in this tool.
+
+Decision: A. The smallest scope that answers the reports, with the same rule as the allowlist: every
+exception says why. Whole-file rules already have the allowlist and overrides. Details:
+
+- The directive goes in the file that reports the finding (for R5a and R5b, the copy, not the original);
+  "next line" counts lines as every rule does (LF, CRLF, CR).
+- Suppressed findings do not count toward an allowlist entry's `count`.
+- The directive is text like any other: it counts toward R1a, R1b, R1c and R1d.
+- A malformed directive is a problem in the instruction file, not the config, so it is an error under
+  the pseudo rule `disable` (exit 1), not exit 2. A named rule with no finding on the next line is a
+  warning. Like `allowlist`, `disable` is in no preset and no level setting changes it.
+
+Consequences:
+
+- The audit trail for one-line exceptions is the files themselves; there is no expiry.
+- A comment line in `CLAUDE.md` costs nothing for Claude Code, which strips block-level HTML comments,
+  but other agents may read it.

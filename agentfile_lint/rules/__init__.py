@@ -3,6 +3,7 @@
 Each module exposes:
 - `CHECKS`: ((id, name, description), ...), one entry per rule id it reports. Every id has its own
   level; a finding carries the id of the check that produced it.
+- `WHOLE_FILE` (optional): ids whose findings are about a whole file; per-line directives reject them.
 - `SHARED` (optional): (group, keys), the `[shared.<group>]` table its ids share.
 - `validate(shared, tables)`: `shared` is the validated-for-keys `[shared.<group>]` table (or None),
   `tables` maps each of its ids to its `[rules.<id>]` table; returns (params, effective): the module's

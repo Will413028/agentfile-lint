@@ -21,6 +21,7 @@ ID = "C1"
 NAME = "claude-md"
 DESCRIPTION = "CLAUDE.md is a one-line import of AGENTS.md (import-only) or absent (forbid)"
 CHECKS = ((ID, NAME, DESCRIPTION),)
+WHOLE_FILE = (ID,)
 
 MODES = ("import-only", "forbid")
 

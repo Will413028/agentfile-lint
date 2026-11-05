@@ -30,7 +30,7 @@ locally and in CI does.
 
 ```
 preset (shipped) <- repo config (.agentfile-lint.toml, `extends`) -> effective config
-effective config + git ls-files (full set) -> rules -> findings -> overrides -> allowlist -> output + exit code
+effective config + git ls-files (full set) -> rules -> findings -> overrides -> per-line directives -> allowlist -> output + exit code
 ```
 
 - Rules are data: a rule module reads parameters, and repo-specific behaviour is never a
@@ -180,7 +180,7 @@ Each entry: `paths` (globs), `rules` (rule id or alias -> level), `reason`, opti
   (dropped when that is `off`). For one file and one rule: when a lowering entry matches, the lowest of
   the rule level and the matching lowering entries applies, whatever raising entries match (lowering
   wins); otherwise the highest of the rule level and the matching raising entries. Entry order does not
-  matter. `E0` and `allowlist` cannot be overridden.
+  matter. `E0`, `allowlist` and `disable` cannot be overridden.
 - An entry `{ unset = [globs], reason }` (no other keys) removes those globs from the overrides the
   file inherits through `extends`; an inherited entry left with no glob is dropped. A glob that is in no
   inherited entry fails the configuration. It does not touch the file's own entries.
@@ -212,7 +212,32 @@ Each entry: `rule`, `path`, `count`, `reason`, `expires` (docs/adr/0005).
 - Within `warn_days` (default 14) of expiry: warning "expires in N days".
 - `max_days` (default 90): an `expires` later than today plus `max_days` fails the configuration.
 - `max_entries` (default 10): more entries fail the configuration.
-- Renewal means editing the config and writing a new reason; there are no inline suppressions.
+- Renewal means editing the config and writing a new reason.
+
+## Per-line directives
+
+`<!-- agentfile-lint-disable-next-line <ids> -- <reason> -->` drops the findings of the named rules on
+the next line of the same file (docs/adr/0006).
+
+- The directive is a line of its own (up to three spaces of indent, as four make an indented code
+  block), outside fenced code and HTML comments, which every text rule skips the same way. Any such line
+  starting with `<!-- agentfile-lint-disable` is parsed as one.
+- One directive per target line: a directive right above another directive is an error, since it would
+  cover the directive line; name every rule in the one right above the target.
+- `<ids>`: one or more rule ids or aliases, separated by commas or spaces. A reason after ` -- ` is
+  required.
+- "Next line" counts lines the way every rule does: only LF, CRLF and a lone CR end a line.
+- It goes in the file that reports the finding: for R5a and R5b, the file with the repeated line, not
+  the ancestor or sibling it repeats.
+- Rules whose findings are about the whole file (R1a, R1b, R1c, C1) are not accepted; use an allowlist
+  entry or an override.
+- The directive is ordinary text for the other rules: it counts toward R1a, R1b, R1c and R1d.
+- Directives run after overrides and before the allowlist, so a suppressed finding does not count
+  toward an entry's `count`.
+- Pseudo rule `disable`: a malformed directive (no id, no reason, an unknown or retired id, a whole-file
+  rule, a stacked directive, or a line that starts like a directive but is not one) is an error on the
+  directive's line (exit 1; exit 2 stays for configuration errors); a rule a directive names with no finding of it on the next line is a
+  warning, also when the rule is off. No level or override changes `disable`.
 
 Because expiry depends on the date, a repository with no commits can turn red. Run CI on a
 weekly schedule so warnings appear before that happens.
@@ -236,7 +261,8 @@ Every finding goes to stdout, sorted by file, line, rule (docs/adr/0004).
   warnings per step, 50 per job) keeps its location in the log. `action.yml` passes this format.
 
 The pseudo rule `E0` reports an instruction file that is not valid UTF-8; it is always on, and only an
-allowlist entry can exempt a file. Usage and configuration errors go to stderr (configuration
+allowlist entry can exempt a file; the pseudo rule `disable` reports per-line directives (Per-line
+directives). Usage and configuration errors go to stderr (configuration
 errors as `agentfile-lint: message`; argparse prints its own usage message). Exit `0`: no errors; `1`: at least one error; `2`: usage or configuration
 problem. `--warn-as-error` promotes warnings. The formats and exit codes are part of the
 contract; which version part a change to them needs is in `docs/versioning.md`.

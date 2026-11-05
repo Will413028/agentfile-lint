@@ -32,6 +32,13 @@ def parent_dirs(path: str) -> list[str]:
 
 def prose_lines(text: str) -> Iterator[tuple[int, str]]:
     """(1-based line number, line) for lines outside fenced code blocks; HTML comments are cut out."""
+    for number, _, line in prose_lines_raw(text):
+        yield number, line
+
+
+def prose_lines_raw(text: str) -> Iterator[tuple[int, str, str]]:
+    """`prose_lines` with the line as written: (number, raw line, line with HTML comments cut out).
+    A line that is all inside a comment opened on an earlier line is skipped."""
     fence: str | None = None
     in_comment = False
     for number, raw in enumerate(split_lines(text), start=1):
@@ -56,7 +63,7 @@ def prose_lines(text: str) -> Iterator[tuple[int, str]]:
         if start >= 0:
             line = line[:start]
             in_comment = True
-        yield number, line
+        yield number, raw, line
 
 
 def code_spans(line: str) -> Iterator[str]:

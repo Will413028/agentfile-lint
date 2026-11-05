@@ -4,8 +4,8 @@ For each rule: why a finding is a problem, where its default comes from, whether
 only with `preset:strict`, and how often it was wrong when measured. Every key is documented in
 `agentfile_lint/presets/default.toml`; `agentfile-lint --list-rules` prints the effective levels.
 
-Every rule in the table except `allowlist` has an id and an alias (the name after the level in
-`--list-rules`); `allowlist` and `E0` have only their id. The alias works wherever the id does:
+Every rule in the table except `allowlist` and `disable` has an id and an alias (the name after the level in
+`--list-rules`); `allowlist`, `disable` and `E0` have only their id. The alias works wherever the id does:
 `[rules.file-lines]` is `[rules.R1b]`, an allowlist entry may say `rule = "file-lines"`, and an override
 may say `rules = { file-lines = "warn" }`. Each config file is resolved on its own before merging, so a
 repo's `[rules.file-lines]` overrides a preset's `[rules.R1b]`; one file that names a rule both ways
@@ -32,6 +32,7 @@ new ids.
 | [R6](#r6-copied-constants) | `constants` | values copied from code | heuristic | off | warn |
 | [C1](#c1-claudemd) | `claude-md` | `CLAUDE.md` only imports `AGENTS.md` | convention | off | warn |
 | [allowlist](#allowlist) | — | exceptions are current and still needed | objective | error | error |
+| [disable](#disable) | — | per-line directives are well formed and still needed | objective | error | error |
 
 ## How the rates were measured
 
@@ -204,6 +205,19 @@ override shows up without failing CI unless `--warn-as-error` is given.
 
 Default: on, from your config only; with no entries it reports nothing. Entries warn `warn_days` (14)
 before they expire, so run CI on a weekly schedule.
+
+Measured: objective, so no false-positive rate.
+
+## disable
+
+Why: a false positive on one line should be fixable next to that line, but an exception without a
+reason or one that no longer applies is as bad as an allowlist entry without them.
+`<!-- agentfile-lint-disable-next-line R5a -- reason -->` on a line of its own drops the named rules'
+findings on the next line (docs/design.md, Per-line directives). A malformed directive (no id, no
+reason, an unknown id or a whole-file rule: `R1a`, `R1b`, `R1c`, `C1`) is an error; a named rule with no
+finding on the next line is a warning.
+
+Default: on; with no directives it reports nothing. No level or override changes it.
 
 Measured: objective, so no false-positive rate.
 
