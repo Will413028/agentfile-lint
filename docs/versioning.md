@@ -53,7 +53,8 @@ and the next release pull request conflicts with itself.
 4. Publish a GitHub release for the tag (notes from the changelog section). `publish.yml` then
    builds the sdist and wheel from the tag and uploads them to PyPI with Trusted Publishing (no stored
    token). PyPI holds the name and offers an install path; consumers still pin the full commit SHA.
-5. Fast-forward `dev` to the merge commit (`git merge --ff-only origin/main` on `dev`, then push).
+5. Fast-forward `dev` to the merge commit (`git merge --ff-only origin/main` on `dev`, then push;
+   if `dev` moved on after the pull request, `git merge origin/main` instead).
    `dev` is the repository's default branch, and `pre-commit autoupdate` takes the newest tag
    reachable from it; without this step it finds only tags made before the branch model (0.4.0).
 

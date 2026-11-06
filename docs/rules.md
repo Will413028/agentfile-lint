@@ -403,7 +403,7 @@ Readings:
 Per-line directives cannot name H ids (JSON has no comments); use an allowlist entry or an override.
 
 Keeping current: the event names (H2), handler types (H4) and required fields (H5) are those of the
-hooks reference on the date in the table header, and Claude Code adds events in minor releases. They
+hooks reference as read on 2026-11-06 (Claude Code 2.1.318), and Claude Code adds events in minor releases. They
 are re-read before every minor release of this tool (docs/versioning.md), and a finding on a name the
 current hooks reference documents is a bug fixed in a patch release.
 
