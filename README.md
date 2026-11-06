@@ -124,7 +124,7 @@ documented" means the documentation does not say, not that the feature is missin
 | Vendored copy | reproducible directory with a hash check | not documented | not documented | not documented |
 | References checked | test names, `§N` spec sections; paths with `preset:strict` | import paths, commands, referenced files | paths, commands (against `package.json`, `Makefile`) | file references, imports |
 | Duplicates between files | identical lines in a file and its ancestors | not documented | duplicate content across files | duplicate content; across files not documented |
-| Auto-fix | no | yes | broken paths | yes |
+| Auto-fix | allowlist entries and per-line directives only (`--fix`, `--diff`) | yes | broken paths | yes |
 | Editor | no | LSP, IDE plugins | LSP | no |
 | Output | `file:line: severity: rule-id: message`, JSON, GitHub; exit 0/1/2 | GitHub, JSON, SARIF | text, JSON, SARIF; exit 0/1/2 | GitHub; 0-100 score |
 
@@ -143,7 +143,19 @@ agentfile-lint --today 2026-01-31    # replace the current date (reproducible ru
 agentfile-lint --config path.toml    # explicit config instead of .agentfile-lint.toml
 agentfile-lint --warn-as-error
 agentfile-lint --format json         # or github (workflow commands) or sarif; default text
+agentfile-lint --fix                 # apply safe fixes, then report what is left
+agentfile-lint --diff                # print those fixes as a diff instead; add --unsafe-fixes for the rest
 ```
+
+Fixes only touch what the tool asked you to write: an unused per-line directive is removed, an
+allowlist entry's `count` is lowered to the findings left, and an entry whose file no longer violates
+its rule is removed (only in the config file the run loads, never in one it extends). They never
+edit instruction content and never widen an exception. Removing only some ids of a directive is
+unsafe (its reason may be about them) and needs `--unsafe-fixes`. Before writing, `--fix` checks that
+each TOML edit changes nothing but its target and that the edited files suppress no finding the
+original did not; otherwise it leaves the file and the message stays as a suggestion. Exit codes
+mean what they always do (`--diff` reports the findings as they are). The pre-commit hook does not
+pass `--fix`; if you add it, it also edits files you have not staged.
 
 Other commands:
 
@@ -159,8 +171,8 @@ follows [`docs/versioning.md`](docs/versioning.md).
 Findings go to stdout, one line each: `file:line: severity: rule-id: message`, where `severity` is
 `error` or `warning`; a finding about a whole file has no line: `file: severity: rule-id: message`.
 `--format json` prints one document, `{"version": 1, "findings": [...]}`, each finding with `file`,
-`line` (`null` for a whole file), `level`, `rule` and `message`; `--format github` prints GitHub
-workflow commands; `--format sarif` prints one SARIF 2.1.0 log for code scanning. Usage and configuration problems go to stderr. Exit codes: `0` no errors, `1` at
+`line` (`null` for a whole file), `level`, `rule`, `message` and `fix` (`null` or its edits); `--format github` prints GitHub
+workflow commands; `--format sarif` prints one SARIF 2.1.0 log for code scanning, with `fixes`. Usage and configuration problems, and the `--fix` summary, go to stderr. Exit codes: `0` no errors, `1` at
 least one error, `2` usage or configuration problem.
 
 Files given on the command line are ignored; the full tracked set is always analyzed

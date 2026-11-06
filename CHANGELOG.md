@@ -43,8 +43,24 @@ versions follow [Semantic Versioning](https://semver.org/).
   `max_chars` (none: no limit) and `frontmatter_key` (the entry applies only when the frontmatter has
   that key). A per-line directive cannot name it (docs/rules.md, docs/adr/0003).
 
+- Fixes: a finding may carry a fix, `safe` or `unsafe`. `--fix` applies the safe ones (again on the
+  result until none is left) and reports what is left, `--unsafe-fixes` adds the unsafe ones,
+  `--diff` prints them as a unified diff without writing. Exit codes keep their meaning; a file that
+  cannot be written exits 2 with nothing written. The first fixes edit only what the tool asked for:
+  an unused per-line directive is removed (safe), unused ids of a partly used one are removed
+  (unsafe), an allowlist entry's `count` is lowered to n and an entry whose file no longer violates
+  its rule is removed (safe, only in the config file the run loads). n > `count`, expired entries
+  and entries for files the run did not analyze stay suggestions. Two checks guard every write: a
+  TOML edit must re-parse to the original with only its target changed, and a second run on the
+  edited text may suppress no finding the first did not (docs/design.md, Fixes). Nothing is written
+  without `--fix`; the action and the pre-commit hook do not pass it.
+
 ### Changed (breaking)
 
+- JSON findings have a new `fix` field (`null`, or applicability, description and edits); SARIF
+  results with a fix have `fixes`, and the run sets `columnKind: "unicodeCodePoints"`. The JSON
+  `version` stays 1 (it goes up only when a field is removed or changes meaning), but a consumer that
+  compares whole objects sees the new key.
 - `[discover] globs` adds `**/CLAUDE.local.md` and `**/.claude/rules/**/*.md` to the default, two
   files Claude Code loads like `CLAUDE.md` (https://code.claude.com/docs/en/memory). A repository that
   keeps the default glob list now gets findings on those files; one with its own `globs` is unchanged.

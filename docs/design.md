@@ -34,7 +34,11 @@ locally and in CI does.
 ```
 preset (shipped) <- repo config (.agentfile-lint.toml, `extends`) -> effective config
 effective config + git ls-files or the --no-git walk (full set) -> rules -> findings -> overrides -> per-line directives -> allowlist -> output + exit code
+with --fix or --diff: findings with fixes -> edits in memory -> the same run on the edited texts (safety net 2) -> written (--fix) or printed (--diff)
 ```
+
+The checker only reads files; `--fix` is the one way it writes to a checked repository (Fixes), and
+the `vendor` subcommand writes its copy.
 
 - Rules are data: a rule module reads parameters, and repo-specific behaviour is never a
   branch in code. Differences between repositories are config values.
@@ -289,6 +293,64 @@ the next line of the same file (docs/adr/0006).
 Because expiry depends on the date, a repository with no commits can turn red. Run CI on a
 weekly schedule so warnings appear before that happens.
 
+## Fixes
+
+A finding may carry a fix: edits to file text, marked `safe` or `unsafe` as ruff does. The checker
+writes nothing unless asked: `--fix` applies the safe fixes and then reports the findings that are
+left, `--unsafe-fixes` (only with `--fix` or `--diff`) adds the unsafe ones, and `--diff` prints the
+same edits as a unified diff without writing (split at LF, as `git apply` reads it). Exit codes keep
+their meaning (docs/adr/0004): after `--fix` they come from the findings left, with `--diff` from the
+findings as they are, and `2` when a file cannot be written. `--fix` and `--diff` exclude each
+other, and `--diff` takes no `--format`. The action and the pre-commit hook do not pass `--fix`;
+added to a hook, it edits any file it fixes, staged or not, since the full set is always analyzed.
+
+A fix can uncover another (a directive stacked on an unused one suppresses nothing once that one is
+gone; a lowered `count` can follow), so, as in ruff, the fixes are applied again to the result until
+none is left, at most 10 passes. Two fixes whose deletions overlap (neighbouring entries sharing a
+blank line) merge into one deletion; a deletion that reaches the end of the file also takes the
+blank lines before it.
+
+Fixes edit only what the tool asked the user to write, never instruction content:
+
+- A directive none of whose rules suppresses anything: the line is removed (safe).
+- A directive some of whose rules are still in use: the unused ids are removed and the reason stays
+  (unsafe, since the reason may be about a removed id).
+- An allowlist entry with n < `count`: `count` becomes n (safe).
+- An allowlist entry whose file no longer violates its rule (n = 0 for an analyzed file): the entry is
+  removed (safe), unless no rule ran on it (it is not valid UTF-8, `E0`). When removing every
+own entry would leave the file with none while a file it extends has entries (they would come back),
+the last one stays, with its message as the suggestion.
+
+Not fixed, the message stays the suggestion: n > `count` (a new violation; raising `count` would hide
+it, docs/adr/0005), an expired entry (a person fixes the file or renews it with a new reason), and an
+entry for a file the run did not analyze (that depends on git tracking, `--no-git` and the globs, not
+on the file). A fix never widens what is suppressed.
+
+Only the config file the run loads is edited. `allowlist.entries` is a list, so a file's own list
+replaces the inherited one as a whole along `extends`; when the file has none, its entries come from a
+file it extends and get no fix. The runner has no TOML writer, so an entry is found by its
+`[[allowlist.entries]]` header line (`toml_edit.py`); an inline array, a quoted key or a header
+inside a string makes the header count differ from the entry count, and then no entry gets a fix.
+
+Two safety nets, each the only path:
+
+1. A TOML edit is parsed again with `tomllib`; when anything but the target (the entry's `count`,
+   or the entry) differs, the finding gets no fix (a multi-line string that fools the line-based
+   locator ends here).
+2. After each pass of edits, the run is repeated on the edited texts in memory. The findings it suppresses (by
+   directive or allowlist entry, compared by file, line moved by the edits, and rule) must be among
+   those suppressed before, and the effective allowlist entries must be among those before with no
+   higher `count`; otherwise nothing is written and stderr names the findings or entries (lines as
+   numbered on disk). Removing an unused directive can turn a directive stacked on it into one that
+   suppresses the next line.
+
+Edits are applied to the texts the run read, and keep line endings and every other byte. Every file
+to edit must be writable before the first is written, so a run writes all of them or none. `--fix`
+writes a short summary to stderr (how many fixes it applied in how many files, fixes it skipped,
+unsafe fixes left), so stdout stays findings only.
+Positions in JSON and SARIF are 1-based lines and columns, columns in Unicode code points, the end
+exclusive.
+
 ## Output and exit codes
 
 Every finding goes to stdout, sorted by file, line, rule (docs/adr/0004).
@@ -298,7 +360,9 @@ Every finding goes to stdout, sorted by file, line, rule (docs/adr/0004).
   `file: severity: rule-id: message`. (GNU has `sourcefile:lineno: message`, and `program: message`
   when no source file is relevant; it has no form for a whole file.)
 - `--format json`: one document `{"version": 1, "findings": [...]}`; each finding has `file`, `line`
-  (`null` for the whole file), `level` (`error` or `warning`), `rule` and `message`. `version` goes up
+  (`null` for the whole file), `level` (`error` or `warning`), `rule`, `message` and `fix`: `null`, or
+  `{"applicability": "safe" | "unsafe", "description", "edits": [...]}`, each edit with `file`,
+  `start` and `end` (`{"line", "column"}`) and the replacement `text` (Fixes). `version` goes up
   only when a field is removed or changes meaning, not when one is added.
 - `--format github`: one workflow command per finding, `::error` or `::warning` with `file`, `line`
   (omitted for the whole file; GitHub has no whole-file annotation, and its API then reports
@@ -309,8 +373,11 @@ Every finding goes to stdout, sorted by file, line, rule (docs/adr/0004).
 - `--format sarif`: one SARIF 2.1.0 log (the version GitHub code scanning reads): one run, the tool
   driver with a descriptor for every rule and pseudo rule, and one result per finding with `ruleId`,
   `level` (`error` or `warning`), `message.text` and a physical location whose `uri` is the
-  percent-encoded relative path; `region.startLine` is omitted for a whole-file finding. The action
-  does not upload it (docs/adr/0006).
+  percent-encoded relative path; `region.startLine` is omitted for a whole-file finding. A finding
+  with a fix has `fixes` (one fix: `description`, and `artifactChanges` with a `deletedRegion` and
+  `insertedContent` per edit); SARIF has no applicability, so an unsafe fix says so in its
+  description. The run sets `columnKind` to `unicodeCodePoints`. The action does not upload it
+  (docs/adr/0006).
 
 The action's `working-directory` input only changes where it runs. Reported paths stay relative to
 the git root: the runner passes a relative `file=` through unchanged and GitHub reads it from the
@@ -320,7 +387,8 @@ reads a relative SARIF `uri` the same way.
 The pseudo rule `E0` reports an instruction file that is not valid UTF-8; it is always on, and only an
 allowlist entry can exempt a file; the pseudo rule `disable` reports per-line directives (Per-line
 directives). Usage and configuration errors go to stderr (configuration
-errors as `agentfile-lint: message`; argparse prints its own usage message). Exit `0`: no errors; `1`: at least one error; `2`: usage or configuration
+errors as `agentfile-lint: message`; argparse prints its own usage message), and so does the
+`--fix` summary. Exit `0`: no errors; `1`: at least one error; `2`: usage or configuration
 problem. `--warn-as-error` promotes warnings. The formats and exit codes are part of the
 contract; which version part a change to them needs is in `docs/versioning.md`.
 

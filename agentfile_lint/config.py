@@ -57,6 +57,16 @@ def default_config_path(root: Path | None) -> Path | None:
     return None
 
 
+@dataclass(frozen=True)
+class Source:
+    """The config file a run loads directly, for fixes that edit it (docs/design.md, Fixes)."""
+
+    path: Path
+    text: str           # as stored: decoded bytes, line endings untouched
+    own_entries: bool   # `allowlist.entries` is written in this file (else inherited, or none)
+    inherits_entries: bool = False  # a file it extends has entries, which return when its own list goes
+
+
 @dataclass
 class Config:
     allowlist: allowlist.Settings
@@ -69,6 +79,7 @@ class Config:
     # Every `[discover]` list by key (`GLOB_KEYS` values replace along `extends`, `EXTEND_KEYS` concatenate).
     discover: dict[str, list[str]] = field(default_factory=dict)
     sections: dict[str, Any] = field(default_factory=dict)  # top-level table a rule module owns -> effective value
+    source: Source | None = None  # None: no config file, or one whose text a fix cannot edit
 
     def family_globs(self, family: str) -> list[str]:
         """What discovery matches for a file family: its glob list then its `extend_*` list, duplicates dropped."""
@@ -121,7 +132,9 @@ def _read(source: str, text: str) -> dict[str, Any]:
         raise ConfigError(f"{source}: invalid TOML: {exc}") from exc
 
 
-def _load_raw(ref: str, base_dir: Path | None, seen: tuple[str, ...]) -> dict[str, Any]:
+def _load_raw(
+    ref: str, base_dir: Path | None, seen: tuple[str, ...], text: str | None = None, notes: dict | None = None,
+) -> dict[str, Any]:
     if ref.startswith(PRESET_PREFIX):
         name = ref[len(PRESET_PREFIX):]
         key = ref
@@ -136,7 +149,8 @@ def _load_raw(ref: str, base_dir: Path | None, seen: tuple[str, ...]) -> dict[st
             path = base_dir / path
         key = str(path.resolve())
         try:
-            text = path.read_text(encoding="utf-8")
+            if text is None:  # given for the file a run loads when `--fix` re-checks edited text
+                text = path.read_text(encoding="utf-8")
         except OSError as exc:
             raise ConfigError(f"cannot read config {path}: {exc.strerror}") from exc
         data = _read(str(path), text)
@@ -170,6 +184,9 @@ def _load_raw(ref: str, base_dir: Path | None, seen: tuple[str, ...]) -> dict[st
         own = {**own, "discover": {k: v for k, v in discover.items() if k not in EXTEND_KEYS}}
     # The file this run loads directly; entries from the files it extends are "inherited".
     direct = not seen and not ref.startswith(PRESET_PREFIX)
+    if direct and notes is not None:
+        inherited_al = merged.get("allowlist")
+        notes["inherits_entries"] = isinstance(inherited_al, dict) and bool(inherited_al.get("entries"))
     merged = _merge(merged, own)
     mine: list[tuple[Any, str, int, bool]] = []
     for i, entry in enumerate(own_overrides):
@@ -258,13 +275,29 @@ def _retired(key: str, where: str) -> None:
         raise ConfigError(f"{where}: {RETIRED[key]}")
 
 
-def load(config_path: Path | None, today: datetime.date) -> Config:
-    """Load the preset plus `config_path` (when given). Raises ConfigError on any problem."""
+def load(config_path: Path | None, today: datetime.date, text: str | None = None) -> Config:
+    """Load the preset plus `config_path` (when given). Raises ConfigError on any problem. `text`
+    replaces the content of `config_path` (the edited config that `--fix` checks before writing it)."""
     if config_path is None:
-        raw = _load_raw(DEFAULT_PRESET, None, ())
-    else:
-        raw = _load_raw(str(config_path), None, ())
-    return _validate(raw, today)
+        return _validate(_load_raw(DEFAULT_PRESET, None, ()), today)
+    notes: dict[str, bool] = {}
+    cfg = _validate(_load_raw(str(config_path), None, (), text, notes), today)
+    cfg.source = _source(config_path, text, notes.get("inherits_entries", False))
+    return cfg
+
+
+def _source(path: Path, text: str | None, inherits_entries: bool) -> Source | None:
+    """What a fix may edit: the file's text as stored (read again as bytes: safety net 1 then checks the
+    same text `--fix` edits, while the text-mode read above accepts lone CR line endings that `tomllib`
+    rejects as stored), and whether its allowlist entries are its own. `allowlist.entries` is a
+    list, so along `extends` a file's own list replaces the inherited one as a whole (`_merge`)."""
+    try:
+        stored = text if text is not None else path.read_bytes().decode("utf-8")
+        data = tomllib.loads(stored)
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError):
+        return None  # e.g. lone CR line endings, which only the text-mode read accepts
+    al = data.get("allowlist")
+    return Source(path, stored, isinstance(al, dict) and "entries" in al, inherits_entries)
 
 
 def _validate(raw: dict[str, Any], today: datetime.date) -> Config:

@@ -11,6 +11,12 @@ may say `rules = { file-lines = "warn" }`. Each config file is resolved on its o
 repo's `[rules.file-lines]` overrides a preset's `[rules.R1b]`; one file that names a rule both ways
 fails (exit 2). Findings and error messages always print the id.
 
+Fixes (`--fix`, docs/design.md, Fixes): only `allowlist` and `disable` findings carry one; no R, C, S,
+H, M or E0 rule fixes anything, since its fix would rewrite instruction content or settings the tool
+cannot judge. R5a in particular gets no fix and no suggestion: in a measured sample of 67 R5a findings,
+54 were translated copies or examples that deleting the line would break, and telling them apart is a
+path heuristic, not an objective check.
+
 Each id is one check with one level (docs/adr/0005). The ids R1, R4 and R5 of 0.6.0 and their aliases
 `size`, `rot` and `duplicates` were split in 0.7.0 and fail the configuration with a message naming the
 new ids.
@@ -260,6 +266,10 @@ override shows up without failing CI unless `--warn-as-error` is given.
 Default: on, from your config only; with no entries it reports nothing. Entries warn `warn_days` (14)
 before they expire, so run CI on a weekly schedule.
 
+Fix (safe, entries written in the config file the run loads): lower `count` to n; remove an entry
+whose file no longer violates its rule. No fix for n > `count`, an expired entry, or an entry for a
+file the run did not analyze.
+
 Measured: objective, so no false-positive rate.
 
 ## disable
@@ -272,6 +282,10 @@ reason, an unknown id or a whole-file rule: `R1a`, `R1b`, `R1c`, `R1e`, `C1`) is
 finding on the next line is a warning.
 
 Default: on; with no directives it reports nothing. No level or override changes it.
+
+Fix: a directive whose every rule suppresses nothing is removed (safe); unused ids of a directive
+that still suppresses something are removed and the reason stays (unsafe, `--unsafe-fixes`).
+Malformed directives get no fix.
 
 Measured: objective, so no false-positive rate.
 
