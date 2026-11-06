@@ -2,9 +2,10 @@
 
 A linter for agent instruction files (`AGENTS.md`, `CLAUDE.md`) that a team runs the same way in every
 repository: rules are data in one TOML file, debt exceptions expire while permanent path scopes live in
-the config with a required reason, and the runner is plain Python with no
-dependencies, so the git hook, CI and a vendored copy give the same answer. It checks `AGENTS.md`
-and `CLAUDE.md` today; `SKILL.md`, hooks and MCP config are next if it proves useful.
+the config with a required reason, and the runner is plain Python with nothing to install beyond
+it (PyYAML is vendored inside), so the git hook, CI and a vendored copy give the same answer. It
+checks `AGENTS.md`, `CLAUDE.md`, Claude Code's `.claude/rules/`, `SKILL.md` files, hooks settings and
+`.mcp.json`.
 
 ```sh
 uvx agentfile-lint        # in any git repository; no config needed
@@ -118,7 +119,7 @@ documented" means the documentation does not say, not that the feature is missin
 | | agentfile-lint | [agnix](https://github.com/agent-sh/agnix) | [ctxlint](https://github.com/YawLabs/ctxlint) | [agentlinter](https://github.com/seojoonkim/agentlinter) |
 |---|---|---|---|---|
 | Runs on | Python 3.11+, nothing to install (standard library plus a vendored copy of PyYAML) | Rust binary (npm, brew, pip, cargo) | Node (`npx`), no runtime dependencies | Node 18+ (`npx`) |
-| Files | `AGENTS.md`, `CLAUDE.md`, `SKILL.md`; others by glob | `CLAUDE.md`, `AGENTS.md`, `SKILL.md`, hooks, MCP, Cursor, Copilot, more | context files of 16 tools, MCP config | `CLAUDE.md`, `AGENTS.md`, `SKILL.md`, Cursor, Copilot, more |
+| Files | `AGENTS.md`, `CLAUDE.md`, `.claude/rules/`, `SKILL.md`, hooks, MCP; others by glob | `CLAUDE.md`, `AGENTS.md`, `SKILL.md`, hooks, MCP, Cursor, Copilot, more | context files of 16 tools, MCP config | `CLAUDE.md`, `AGENTS.md`, `SKILL.md`, Cursor, Copilot, more |
 | Shared config | `extends` presets and files | `extend` base files | not documented | `extends` of the built-in preset |
 | Exceptions | allowlist entries need a reason and an expiry date, expired or unneeded entries fail; path overrides need a reason and raise a level only with `raise = true`; per-line directives need a reason, unused ones warn | disabled rules, per-file overrides, inline comments | ignored rules with an optional reason; unused ones reported | ignored paths |
 | Vendored copy | reproducible directory with a hash check | not documented | not documented | not documented |
@@ -126,7 +127,7 @@ documented" means the documentation does not say, not that the feature is missin
 | Duplicates between files | identical lines in a file and its ancestors | not documented | duplicate content across files | duplicate content; across files not documented |
 | Auto-fix | allowlist entries and per-line directives only (`--fix`, `--diff`) | yes | broken paths | yes |
 | Editor | no | LSP, IDE plugins | LSP | no |
-| Output | `file:line: severity: rule-id: message`, JSON, GitHub; exit 0/1/2 | GitHub, JSON, SARIF | text, JSON, SARIF; exit 0/1/2 | GitHub; 0-100 score |
+| Output | `file:line: severity: rule-id: message`, JSON, GitHub, SARIF; exit 0/1/2 | GitHub, JSON, SARIF | text, JSON, SARIF; exit 0/1/2 | GitHub; 0-100 score |
 
 Choose agnix for breadth (many file types, IDE plugins, auto-fix). Choose agentfile-lint to run one
 small, pinned set of rules across many repositories: debt exceptions expire and permanent ones are
@@ -249,14 +250,34 @@ suppresses nothing is a warning, a malformed one an error.
 
 ## Install and wire up
 
-pre-commit:
+Every way to run it needs Python 3.11 or newer. To run it without installing, use `uvx` as above. To
+install the `agentfile-lint` command for your user, in its own environment:
+
+```sh
+pipx install agentfile-lint                          # or agentfile-lint==<version> to pin
+pipx install --python python3.12 agentfile-lint      # when the default python3 is older than 3.11
+pipx upgrade agentfile-lint
+```
+
+pre-commit, in `.pre-commit-config.yaml`:
 
 ```yaml
-- repo: https://github.com/Will413028/agentfile-lint
-  rev: <tag or full commit SHA>
-  hooks:
-    - id: agentfile-lint
+repos:
+  - repo: https://github.com/Will413028/agentfile-lint
+    rev: <tag or full commit SHA>
+    hooks:
+      - id: agentfile-lint
+        # language_version: python3.12   # when pre-commit's default Python is older than 3.11
 ```
+
+```sh
+pre-commit install                     # run the hook on every commit
+pre-commit run agentfile-lint          # run it once now
+pre-commit autoupdate --freeze --repo https://github.com/Will413028/agentfile-lint   # newest tag, as a full SHA
+```
+
+`autoupdate` finds 0.9.0 and later; before 0.9.0 it picked 0.4.0, so set `rev:` by hand when moving
+to a version older than 0.9.0.
 
 Run on every commit and push: rules R3a, R3b and R3c read test files, source and docs, and cross-file
 rules read the whole tracked set, so do not filter the hook, lefthook entry or workflow by instruction

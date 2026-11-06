@@ -400,6 +400,11 @@ Readings:
 
 Per-line directives cannot name H ids (JSON has no comments); use an allowlist entry or an override.
 
+Keeping current: the event names (H2), handler types (H4) and required fields (H5) are those of the
+hooks reference on the date in the table header, and Claude Code adds events in minor releases. They
+are re-read before every minor release of this tool (docs/versioning.md), and a finding on a name the
+current hooks reference documents is a bug fixed in a patch release.
+
 Measured: objective, so no false-positive rate. On the 22-repository sample of docs/field-report.md
 (2026-11-06), the default globs find 5 settings files in 4 repositories, all valid, with H findings
 in none; R, C and S findings are the same as before the H rules.
@@ -425,6 +430,8 @@ Readings:
 
 - JSON is read as for H1. Positions are JSON paths (`mcpServers.<name>`).
 - M4's required fields are measured, not stated in the MCP docs, which show them in every example.
+- Keeping current: the server types (M3) and required fields (M4) are re-read with the H rules' sources
+  before every minor release; a finding on a type the current MCP page documents is a bug.
 - Not checked: optional fields and their types (`args`, `env`, `headers`, `timeout` and the rest),
   blank values Claude Code only warns about (a `command` of spaces, an empty `url`), reserved server
   names, unset `${VAR}` references, and `.mcp.json` files in plugins.

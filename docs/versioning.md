@@ -43,13 +43,18 @@ with a merge commit, never squash or rebase: a squashed `main` no longer contain
 and the next release pull request conflicts with itself.
 
 1. On `dev`: move the `Unreleased` entries under `## [x.y.z] - YYYY-MM-DD`, update the version in
-   `pyproject.toml` and `agentfile_lint/__init__.py`; `make check`; push and wait for CI.
+   `pyproject.toml` and `agentfile_lint/__init__.py`; `make check`; push and wait for CI. For a
+   minor release, first re-read the Claude Code pages docs/rules.md cites for H2 to H5, M3 and M4 and
+   update the lists when they changed.
 2. Open a pull request `dev` -> `main` and merge it with a merge commit once checks are green.
 3. Tag `vx.y.z` (annotated, signed) on the merge commit on `main` and note the full commit SHA for
    consumers.
 4. Publish a GitHub release for the tag (notes from the changelog section). `publish.yml` then
    builds the sdist and wheel from the tag and uploads them to PyPI with Trusted Publishing (no stored
    token). PyPI holds the name and offers an install path; consumers still pin the full commit SHA.
+5. Fast-forward `dev` to the merge commit (`git merge --ff-only origin/main` on `dev`, then push).
+   `dev` is the repository's default branch, and `pre-commit autoupdate` takes the newest tag
+   reachable from it; without this step it finds only tags made before the branch model (0.4.0).
 
 ## Upgrading a consumer
 
@@ -57,7 +62,8 @@ Pick one mechanism per consumer. Optionally, `check-pins` (experimental) checks 
 agree.
 
 - pre-commit: `pre-commit autoupdate --repo <url>` rewrites `rev:` to a tag; use
-  `pre-commit autoupdate --freeze` to write the full commit SHA with the tag as a comment.
+  `pre-commit autoupdate --freeze` to write the full commit SHA with the tag as a comment. It finds
+  0.9.0 and later (see step 5 above); for an older version set `rev:` by hand.
 - renovate: its pre-commit manager updates `rev:` in `.pre-commit-config.yaml`; actions and `uvx`
   references need their own rules or a manual edit. Dependabot's coverage of pre-commit files was not
   verified for this document; check the current documentation before relying on it.

@@ -78,6 +78,9 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 - File names on the command line now start a run when they match any file family's globs. Before,
   only instruction-file names did, so `agentfile-lint path/to/SKILL.md` printed nothing.
+- `pre-commit autoupdate` now finds the newest release. Tags from 0.5.0 to 0.8.0 were not reachable
+  from the default branch, so it moved `rev:` to 0.4.0; each release now fast-forwards `dev` to the
+  tagged commit (`docs/versioning.md`). The README adds `pipx` and pre-commit usage.
 
 ## [0.8.0] - 2026-11-05
 

@@ -109,8 +109,11 @@ is reported; `.claude/rules/` and CLAUDE.local.md as file types go with it.
 
 0.9.0 widens the scope to the other files an agent reads (`SKILL.md`, hooks and `.mcp.json` checks)
 and brings the file types Claude Code loads like CLAUDE.md into the default: `**/CLAUDE.local.md` and
-`**/.claude/rules/**/*.md`. That is the decision the 0.6.0 amendment deferred. With those files in scope, the character limit
-gets its own id, R1e (`file-chars`), at `warn` in the default preset.
+`**/.claude/rules/**/*.md`. That is the decision the 0.6.0 amendment deferred, taken by the maintainer
+before its trigger occurred: no issue has asked for a character limit and no miss has been reported.
+The reason is coverage, not a reported failure: a linter for the files an agent reads should cover the
+files Claude Code documents as truncated. With those files in scope, the character limit gets its own
+id, R1e (`file-chars`), at `warn` in the default preset.
 
 - Files: the ones Claude Code's memory documentation lists as loaded on demand (read 2026-11-06):
   CLAUDE.md and CLAUDE.local.md in a subdirectory, rules in a subdirectory's `.claude/rules/`, and
