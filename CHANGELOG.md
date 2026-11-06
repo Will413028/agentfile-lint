@@ -35,6 +35,23 @@ versions follow [Semantic Versioning](https://semver.org/).
   entry (measured with `claude doctor` and `claude mcp list` on 2.1.318), plus H6; optional fields
   are not checked (docs/rules.md). `config --format json` shows the four new `discover` keys.
 
+- R1e (`file-chars`) at `warn`: Claude Code's per-file character limit on the files it loads on demand
+  and cuts past 40,000 characters with a 200K context: `CLAUDE.md` and `CLAUDE.local.md` in a
+  subdirectory, a subdirectory's `.claude/rules/`, and path-scoped rules in the root `.claude/rules/`.
+  Counted as `wc -m` counts, after removing the frontmatter and block-level HTML comments and trimming
+  whitespace; `excluded_blocks` does not apply. `[[rules.R1e.limits]]` entries take `glob`,
+  `max_chars` (none: no limit) and `frontmatter_key` (the entry applies only when the frontmatter has
+  that key). A per-line directive cannot name it (docs/rules.md, docs/adr/0003).
+
+### Changed (breaking)
+
+- `[discover] globs` adds `**/CLAUDE.local.md` and `**/.claude/rules/**/*.md` to the default, two
+  files Claude Code loads like `CLAUDE.md` (https://code.claude.com/docs/en/memory). A repository that
+  keeps the default glob list now gets findings on those files; one with its own `globs` is unchanged.
+- A `*.local.md` file is now analyzed when a glob that itself ends in `.local.md` matches it (before,
+  never). Wider globs such as `**/*.md` still skip it. Override paths and R5's `exclude` now match
+  such a file like any other.
+
 ### Changed
 
 - The `allowlist` notes for an entry or override glob that matches no analyzed file now say "analyzed

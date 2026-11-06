@@ -54,7 +54,7 @@ class ConfigJsonTest(unittest.TestCase):
                 (root / "p.toml").write_text(f'extends = "preset:{preset}"\n')
                 r = helpers.run_new(root, "config", "--format", "json", "--config", "p.toml")
                 self.assertEqual(r.returncode, 0, r.stderr)
-                # 0.8.0 and 0.9.0 only add keys: with them removed, the output is the 0.7.0 snapshot verbatim.
+                # 0.8.0 and 0.9.0 add keys: with them removed (and the globs below restored), the output is the 0.7.0 snapshot verbatim.
                 doc = json.loads(r.stdout)
                 self.assertEqual(doc["discover"].pop("extend_globs"), [])
                 self.assertEqual(doc["shared"]["duplicates"].pop("exclude"), [])
@@ -68,6 +68,11 @@ class ConfigJsonTest(unittest.TestCase):
                 self.assertEqual(doc["discover"].pop("extend_mcp_globs"), [])
                 self.assertEqual([doc["rules"].pop(f"H{i}") for i in range(1, 7)], [{"level": "warn"}] * 6)
                 self.assertEqual([doc["rules"].pop(f"M{i}") for i in range(1, 5)], [{"level": "warn"}] * 4)
+                self.assertEqual(doc["rules"].pop("R1e")["level"], "warn")
+                # 0.9.0 also changes one value (Changed (breaking)): two more default globs.
+                globs = doc["discover"]["globs"]
+                self.assertEqual(globs[4:], ["**/CLAUDE.local.md", "**/.claude/rules/**/*.md"])
+                del globs[4:]
                 self.assertEqual(json.dumps(doc, sort_keys=True, indent=2, ensure_ascii=False) + "\n", (SNAPSHOTS / f"{preset}.json").read_text())
 
     def test_prints_the_effective_table_of_a_multi_id_module(self):

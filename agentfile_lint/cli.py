@@ -54,7 +54,7 @@ def _relevant(files: list[str], root: Path, cwd: Path, globs: list[str]) -> bool
             rel = Path(os.path.abspath(cwd / name)).relative_to(root).as_posix()
         except ValueError:
             continue
-        if rel == config_mod.CONFIG_NAME or discover.matches(rel, globs):
+        if rel == config_mod.CONFIG_NAME or discover.discovered(rel, globs):
             return True
     return False
 

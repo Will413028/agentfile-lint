@@ -23,7 +23,8 @@ locally and in CI does.
 
 - No LLM in the gate (non-deterministic, paid, and the checked text is untrusted input).
 - Not a Markdown style linter; it knows instruction-file semantics (tiers, budgets), not prose style.
-- Untracked local instruction files (`*.local.md`) are out of scope; CI cannot see them.
+- Local instruction files (`*.local.md`) are found only through a glob that names them; CI usually
+  cannot see them, since they are rarely tracked (File discovery).
 - No distribution channel the runner depends on. It ships as a git repository (pre-commit hook,
   composite action), a PyPI package (`uvx agentfile-lint`) and a pinned vendored copy for restricted
   environments (see Vendored copy); consumers pin a version or a full commit SHA.
@@ -37,7 +38,7 @@ effective config + git ls-files or the --no-git walk (full set) -> rules -> find
 
 - Rules are data: a rule module reads parameters, and repo-specific behaviour is never a
   branch in code. Differences between repositories are config values.
-- One rule id is one check with one level. A module may report several ids (R1a to R1d, R4a and R4b,
+- One rule id is one check with one level. A module may report several ids (R1a to R1e, R4a and R4b,
   R5a and R5b) from one computation; parameters those ids share live in `[shared.<group>]`, the rest
   in `[rules.<id>]` (docs/adr/0005).
 - Merge: tables merge key by key (the child wins); every other value, lists included, is replaced.
@@ -54,8 +55,11 @@ effective config + git ls-files or the --no-git walk (full set) -> rules -> find
 ## File discovery
 
 Files are `git ls-files` entries matching `discover.globs` (default `AGENTS.md`, `**/AGENTS.md`,
-`CLAUDE.md`, `**/CLAUDE.md`) or `discover.extend_globs` (default none), never a file ending in `.local.md`, skipping files deleted in the
-working tree. Two discovered paths in the same directory that are the same file (for example
+`CLAUDE.md`, `**/CLAUDE.md`, `**/CLAUDE.local.md`, `**/.claude/rules/**/*.md`) or `discover.extend_globs`
+(default none), skipping files deleted in the working tree. A file ending in `.local.md` is personal
+and usually untracked: only a glob that itself ends in `.local.md` finds it (`**/CLAUDE.local.md`, which
+Claude Code loads beside CLAUDE.md), never a wider one such as `**/*.md`. Override paths, R5 exclusions
+and the other path filters are plain globs and match it like any file. Two discovered paths in the same directory that are the same file (for example
 `CLAUDE.md -> AGENTS.md`) are one file under two names, each loaded by a different agent: only the
 non-symlink path is analyzed (the first in sort order when all are symlinks), so no rule reports the
 same text twice. The same file in another
@@ -75,7 +79,7 @@ Each rule module checks one family of files, and each family has its own glob li
 
 | Family | Globs | Default | Rules |
 |---|---|---|---|
-| instruction | `discover.globs`, `discover.extend_globs` | `AGENTS.md`, `CLAUDE.md` at any depth | R1a to R6, C1 |
+| instruction | `discover.globs`, `discover.extend_globs` | `AGENTS.md`, `CLAUDE.md`, `CLAUDE.local.md` at any depth, `.md` under `.claude/rules/` | R1a to R6, C1 |
 | skill | `discover.skill_globs`, `discover.extend_skill_globs` | `**/SKILL.md` | S1 to S12 |
 | hooks | `discover.hooks_globs`, `discover.extend_hooks_globs` | `**/.claude/settings.json`, `**/.claude/settings.local.json` | H1 to H6 |
 | mcp | `discover.mcp_globs`, `discover.extend_mcp_globs` | `.mcp.json` (root only) | M1 to M4 |
@@ -105,11 +109,11 @@ so a hook or workflow must not filter by instruction-file paths. The pre-commit 
 commit and push; cross-file rules read the whole tracked set. Add a weekly `schedule` in CI so allowlist
 expiry warnings appear without commits.
 
-## Rules R1a to R1d: size
+## Rules R1a to R1e: size
 
-Size is four rules, each with one level (docs/adr/0005): `R1a` per-file bytes (`file-bytes`), `R1b`
-per-file lines (`file-lines`), `R1c` combined bytes on a path (`path-bytes`) and `R1d` line length
-(`line-length`). They share `[shared.size]`; each `[rules.<id>]` holds its level and its own keys.
+Size is five rules, each with one level (docs/adr/0005): `R1a` per-file bytes (`file-bytes`), `R1b`
+per-file lines (`file-lines`), `R1c` combined bytes on a path (`path-bytes`), `R1d` line length
+(`line-length`) and `R1e` per-file characters (`file-chars`). They share `[shared.size]`; each `[rules.<id>]` holds its level and its own keys.
 
 - `R1a.limits` (`{glob, max_bytes}`) and `R1b.limits` (`{glob, max_lines}`): ordered lists; the first
   entry whose glob matches the path applies, and a file that matches no entry has no limit. Globs use
@@ -123,26 +127,32 @@ per-file lines (`file-lines`), `R1c` combined bytes on a path (`path-bytes`) and
   per directory (`**/AGENTS.md`); Codex also loads `AGENTS.override.md` or fallback names instead of
   AGENTS.md, which the default does not model (revisit when an issue reports such a repository).
 - `R1d.max_chars`: per-line limit in characters, required when R1d is not `off`.
+- `R1e.limits` (`{glob, max_chars, frontmatter_key}`, `glob` required): ordered like R1a, first match
+  wins. An entry without `max_chars` sets no limit for the files it matches; an entry with
+  `frontmatter_key` matches only a file whose frontmatter parses (`frontmatter.py`) and has that
+  top-level key, so a later entry may apply instead. The count is Claude Code's for its per-file limit:
+  code points of the text on disk (a CR counts) without the frontmatter and block-level HTML comments,
+  trimmed with JavaScript's whitespace set (docs/rules.md, R1e).
 - Default preset: only limits an agent's documentation states. R1c at `error`: AGENTS.md files on one
   path that total over 32768 bytes; Codex reads AGENTS.md from the root down to the working directory
   and stops adding files at 32 KiB in total (`project_doc_max_bytes`,
   https://learn.chatgpt.com/docs/agent-configuration/agents-md). R1b at `warn`: `**/AGENTS.md` and
   `**/CLAUDE.md` over 200 lines; Claude Code asks for fewer than 200 lines per CLAUDE.md file and reads
-  AGENTS.md when there is no CLAUDE.md (https://code.claude.com/docs/en/memory). It also cuts a file
-  it loads on demand (a subdirectory CLAUDE.md, CLAUDE.local.md, path-scoped rules) to its first 40,000
-  characters with a 200K context and warns about large files at startup; the default does not check
-  characters, so a CLAUDE.md under 200 lines with long or non-ASCII lines passes (docs/rules.md, R1b).
-  R1a at `error` with no limits, R1d `off`. Every default error must point to such a hard limit
+  AGENTS.md when there is no CLAUDE.md (https://code.claude.com/docs/en/memory). R1e at `warn`: a
+  file Claude Code loads on demand (CLAUDE.md and CLAUDE.local.md in a subdirectory, a subdirectory's
+  `.claude/rules/`, path-scoped rules in the root `.claude/rules/`) over 40,000 characters, where it
+  gives Claude only the start of the file with a 200K context; the limit grows with a 1M context, so
+  a warning. R1a at `error` with no limits, R1d `off`. Every default error must point to such a hard limit
   (docs/adr/0003).
 - Old ids, aliases and keys (`R1`, `size`, `bytes_level`, `lines_level`, `path_limits`,
   `max_line_chars`, the old `max_bytes` tier table) fail the configuration with a message naming what
   replaces them.
 - `[shared.size] excluded_blocks`: marker pairs; the text from a begin marker through the end marker
   (and one trailing LF, CRLF or CR) does not count toward R1a, R1b or R1d (a line wholly inside a block
-  is never reported). It does not apply to R1c. The split is deliberate: a single-file limit is the
+  is never reported). It does not apply to R1c or R1e. The split is deliberate: a single-file limit is the
   author's budget, and a block a tool writes into the file is not the author's; R1c models what the
   agent actually reads, block included.
-- Exact semantics: the engine reads each file once as bytes; R1a to R1d see the text without newline
+- Exact semantics: the engine reads each file once as bytes; R1a to R1e see the text without newline
   translation, so bytes are the bytes on disk (a CRLF counts two) minus the blocks' raw bytes, the same
   unit R1c uses; lines are counted on the text outside the blocks; line length is in characters; a
   limit is exceeded when `measured > limit` (equal passes); a finding's line number is the line on

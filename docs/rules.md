@@ -17,10 +17,11 @@ new ids.
 
 | Rule | Alias | Checks | Kind | Default | `preset:strict` |
 |---|---|---|---|---|---|
-| [R1a](#r1a-to-r1d-size) | `file-bytes` | bytes per file | objective | error, no limit set | same |
-| [R1b](#r1a-to-r1d-size) | `file-lines` | lines per file | objective | warn (200 lines) | same |
-| [R1c](#r1a-to-r1d-size) | `path-bytes` | combined bytes of the files on a path | objective | error (32 KiB) | same |
-| [R1d](#r1a-to-r1d-size) | `line-length` | characters per line | objective | off | off |
+| [R1a](#r1a-to-r1e-size) | `file-bytes` | bytes per file | objective | error, no limit set | same |
+| [R1b](#r1a-to-r1e-size) | `file-lines` | lines per file | objective | warn (200 lines) | same |
+| [R1c](#r1a-to-r1e-size) | `path-bytes` | combined bytes of the files on a path | objective | error (32 KiB) | same |
+| [R1d](#r1a-to-r1e-size) | `line-length` | characters per line | objective | off | off |
+| [R1e](#r1a-to-r1e-size) | `file-chars` | characters per file Claude Code loads on demand | objective | warn (40,000 characters) | same |
 | [R2](#r2-shape) | `shape` | required headings and file shape | objective, needs config | warn | warn |
 | [R3a](#r3a-test-names) | `test-names` | a backticked test name is defined | objective | warn | warn |
 | [R3b](#r3b-path-references) | `path-refs` | a backticked path exists | heuristic | off | warn |
@@ -75,7 +76,7 @@ at most 30% (docs/adr/0003). The rates below come from that measurement (2026-11
   0.5.0 only stops counting a same-directory symlink as a second file, which removed findings that were
   all false positives.
 
-## R1a to R1d size
+## R1a to R1e size
 
 Why: agents read these files every session, and some stop reading past a limit. Codex reads `AGENTS.md` from the repository root
 down to the working directory and stops adding files once their combined size reaches
@@ -83,37 +84,68 @@ down to the working directory and stops adding files once their combined size re
 ([Codex: AGENTS.md](https://learn.chatgpt.com/docs/agent-configuration/agents-md)). Claude Code asks for
 fewer than 200 lines per `CLAUDE.md`, because longer files use more context and reduce adherence, and
 reads `AGENTS.md` when there is no `CLAUDE.md`
-([Claude Code: memory](https://code.claude.com/docs/en/memory)). Claude Code also cuts a file it loads
-on demand (a subdirectory `CLAUDE.md`, `CLAUDE.local.md`, path-scoped rules) to its first 40,000
-characters with a 200K context (more with a 1M context), adds a note telling it to read the rest, and
-warns at startup about large files.
+([Claude Code: memory](https://code.claude.com/docs/en/memory)). Claude Code also gives only the start
+of a file it loads on demand when the file is over 40,000 characters with a 200K context (150,000 with
+a 1M context, 200,000 on Claude Opus 4.6 and Sonnet 4.6), with a note telling Claude to read the rest
+with the Read tool, and warns at startup about large files (same page, "Claude ignores the end of my
+subdirectory CLAUDE.md", read 2026-11-06).
 
 Default: `AGENTS.md` files on one path that total over 32768 bytes are an error (R1c, reported on the
 file where the total first exceeds the limit); `AGENTS.md` and `CLAUDE.md` over 200 lines are a warning
-(R1b). Both are limits an agent's documentation states; the first one drops text, the second is
-guidance. Per-file byte limits (R1a `limits`) and a per-line character limit (R1d `max_chars`) are yours
+(R1b); a file Claude Code loads on demand over 40,000 characters is a warning (R1e). All three are
+limits an agent's documentation states; R1c drops text, R1b is guidance, and R1e's limit depends on
+the session's context window, so the smallest one is the default and R1e is a warning. Per-file byte limits (R1a `limits`) and a per-line character limit (R1d `max_chars`) are yours
 to add. Each id has its own level, so an allowlist entry for the 200-line warning does not hide the
 32 KiB error on the same file. Lines are counted, and every rule's line numbers given, by LF, CRLF and a lone
 CR only, as `grep -n` counts them; form feed and U+2028 do not end a line.
 
-Blind spot: the default counts no characters. A `CLAUDE.md` under 200 lines with long or non-ASCII
-lines passes even when Claude Code would cut it, and the 32 KiB path limit covers only `AGENTS.md`. To
-approximate Claude Code's limit, add a byte limit; bytes are never fewer than characters, so it misses
-no file over 40,000 characters, but it reports text in a three-byte script (Chinese, Japanese) from
-about 13,300 characters. R1a has no default limits, so the list is only yours:
+R1e, the files and the count:
 
-```toml
-[rules.R1a]
-level = "warn"
+- Files (`[[rules.R1e.limits]]`, first match wins): the ones the page lists, at their default
+  globs: `CLAUDE.md` and `CLAUDE.local.md` in a subdirectory (`*/**/CLAUDE.md`,
+  `*/**/CLAUDE.local.md`), rules in a subdirectory's `.claude/rules/` (`*/**/.claude/rules/**/*.md`),
+  and path-scoped rules in the root `.claude/rules/` (`.claude/rules/**/*.md` with
+  `frontmatter_key = "paths"`: the entry applies only when the frontmatter parses and has a `paths`
+  key, whatever its value; Claude Code loads a rule without one, or with frontmatter it cannot parse,
+  at launch, so the next entry, `.claude/rules/**/*.md` without `max_chars`, sets no limit for it; the
+  two come before `*/**/CLAUDE.md`, which would otherwise match `.claude/rules/x/CLAUDE.md`).
+  The root `CLAUDE.md`, `.claude/CLAUDE.md` (an entry with no `max_chars`, which sets no limit) and the
+  root `CLAUDE.local.md` load at launch and are given whole up to 4 MiB, so they have no limit. "Root"
+  is the repository root, where a session usually starts; a session started in a subdirectory loads
+  that directory's files at launch instead. A file must also be an instruction file (`[discover]
+  globs`): the default globs include `**/CLAUDE.local.md` and `**/.claude/rules/**/*.md`.
+- Count: characters as `wc -m` counts them (code points; a CR is a character, so CRLF counts two),
+  after removing the frontmatter (a first line `---` to the next line `---`) and block-level HTML
+  comments, then trimming whitespace at both ends, as Claude Code measures the text it loads (its
+  code, 2.1.317 and 2.1.319; the page says only `wc -m`, and Claude Code itself counts UTF-16 units, so
+  a character outside the Basic Multilingual Plane, such as an emoji, counts one here and two there).
+  A comment block is a line that starts, after up to 3 spaces and outside a fenced code block, with
+  `<!--`, through the end of the line holding `-->` and the empty lines after it; its comments are
+  removed and any other text on those lines stays. An inline comment, one in a code block and an
+  unclosed one count. A comment line indented by up to 3 spaces inside a list item is removed here but
+  kept by Claude Code, so such a file counts a few characters less; one after a block quote's `>` is
+  kept, as by Claude Code. `[shared.size] excluded_blocks` does not apply:
+  Claude reads those blocks.
+- 1M context: set your own limit, for example `max_chars = 150000` in each entry; the limits list
+  replaces the preset's as a whole.
+- Not checked: files brought in with `@path` imports (each counts against the limit on its own; R1e
+  sees only discovered files), `~/.claude/rules/`, and the combined size of all instruction files,
+  which Claude Code warns about at a total the page does not state. A rules file named `*.local.md`
+  is found only with `extend_globs = ["**/.claude/rules/**/*.local.md"]` (the `.local.md` rule of
+  File discovery), and rules reached through a directory symlink under `.claude/rules/` are not
+  found. A subdirectory `CLAUDE.md` that is a symlink to the `AGENTS.md` beside it is analyzed as
+  that `AGENTS.md` (one file, two names), which R1e's default does not list; at 40,000 characters it
+  is at least 40,000 bytes, so the default R1c reports it as an error. R1b's 200 lines covers
+  `AGENTS.md` and `CLAUDE.md` only, not `CLAUDE.local.md` or rules files.
 
-[[rules.R1a.limits]]
-glob = "**/CLAUDE.md"
-max_bytes = 40000
-```
+Blind spot: R1e covers only the files above. A root `CLAUDE.md` under 200 lines with long or non-ASCII
+lines passes, and the 32 KiB path limit covers only `AGENTS.md`; a byte or character limit for other
+files is yours to add with R1a or R1e.
 
 Measured: objective, so no false-positive rate. With no config, 22 public repositories gave 16 errors
 in 6 repositories (all combined sizes over 32 KiB; 2 single files were over on their own) and 20
 warnings (files over 200 lines). A per-file 32 KiB check would have found 3 files in 2 repositories.
+R1e: on the same sample (2026-11-06) the default checks 42 files and the largest is 13,370 characters, so it reports none; the two globs added in 0.9.0 find 7 rules files in 2 repositories, and no other rule reports anything on them.
 
 ## R2 shape
 
@@ -236,7 +268,7 @@ Why: a false positive on one line should be fixable next to that line, but an ex
 reason or one that no longer applies is as bad as an allowlist entry without them.
 `<!-- agentfile-lint-disable-next-line R5a -- reason -->` on a line of its own drops the named rules'
 findings on the next line (docs/design.md, Per-line directives). A malformed directive (no id, no
-reason, an unknown id or a whole-file rule: `R1a`, `R1b`, `R1c`, `C1`) is an error; a named rule with no
+reason, an unknown id or a whole-file rule: `R1a`, `R1b`, `R1c`, `R1e`, `C1`) is an error; a named rule with no
 finding on the next line is a warning.
 
 Default: on; with no directives it reports nothing. No level or override changes it.

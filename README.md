@@ -46,6 +46,7 @@ services/api/AGENTS.md:5: warning: R6: possible copied constant '`MAX_RETRIES = 
 | `R1b` | warn | warn | lines per file: `AGENTS.md` or `CLAUDE.md` over 200 lines; your own limits by glob |
 | `R1c` | error | error | `AGENTS.md` files on one path over 32 KiB in total |
 | `R1d` | off | off | characters per line (`max_chars`) |
+| `R1e` | warn | warn | characters per file Claude Code loads on demand (subdirectory `CLAUDE.md` and `CLAUDE.local.md`, `.claude/rules/`): over 40,000 |
 | `R2` | warn | warn | file shape: required section headings in order, optional title, one-line purpose, bullet-only sections (needs config) |
 | `R3a` | warn | warn | a test name in backticks is defined in a tracked test file |
 | `R3b` | off | warn | a path in backticks exists (heuristic) |
@@ -68,7 +69,9 @@ how that changed from 0.4.0: [`docs/field-report.md`](docs/field-report.md).
 
 ### Other instruction files
 
-The default checks `AGENTS.md` and `CLAUDE.md` only. To add others, list them in `[discover] extend_globs`:
+The default checks `AGENTS.md`, `CLAUDE.md`, `CLAUDE.local.md` and the `.md` files under `.claude/rules/`,
+at any depth (a rules file named `*.local.md` only through `extend_globs`). A `CLAUDE.local.md` is usually untracked, so only `--no-git` finds it. To add others, list
+them in `[discover] extend_globs`:
 
 ```toml
 [discover]
@@ -161,8 +164,8 @@ workflow commands; `--format sarif` prints one SARIF 2.1.0 log for code scanning
 least one error, `2` usage or configuration problem.
 
 Files given on the command line are ignored; the full tracked set is always analyzed
-(cross-file checks and allowlist checks need it). Untracked local instruction
-files (`*.local.md`) are never analyzed. `--no-git` analyzes every file under the current directory
+(cross-file checks and allowlist checks need it). A `*.local.md` file is analyzed only through a glob
+that names it, such as the default `**/CLAUDE.local.md`; `**/*.md` does not find `NOTES.local.md`. `--no-git` analyzes every file under the current directory
 instead, with the same globs; it skips `.git`, `node_modules`, virtual environments and tool caches by
 a fixed list and does not read `.gitignore`.
 
@@ -229,7 +232,7 @@ A single line can be exempted in the file itself, with the rule ids and a requir
 Run make check before every push.
 ```
 
-It covers the next line only and not the whole-file rules (`R1a`, `R1b`, `R1c`, `C1`); a directive that
+It covers the next line only and not the whole-file rules (`R1a`, `R1b`, `R1c`, `R1e`, `C1`); a directive that
 suppresses nothing is a warning, a malformed one an error.
 
 ## Install and wire up
