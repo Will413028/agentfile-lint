@@ -11,18 +11,17 @@ versions follow [Semantic Versioning](https://semver.org/).
   `LICENSE` and a `PROVENANCE` record, and `agentfile_lint/frontmatter.py`, which parses YAML
   frontmatter with it (`SafeLoader` only) for the coming `SKILL.md` rules. Nothing new to install;
   `dependencies` stays empty. The vendored copy written by `vendor` now includes `_yaml/` (docs/adr/0007).
-- `SKILL.md` rules S1 to S12, all at `warn`, run on a new file family: `[discover] skill_globs`
+- `SKILL.md` rules S1 to S12, at `warn` or `off` (below), run on a new file family: `[discover] skill_globs`
   (default `["**/SKILL.md"]`) and `extend_skill_globs`, which concatenates along `extends` like
-  `extend_globs`. No R or C rule runs on a `SKILL.md`. Each S id belongs to the reader it protects:
-  `claude-code` (S1 to S4 and S12: YAML that parses, fewer than 500 lines, `description` plus `when_to_use` within
-  Claude Code's 1536-character listing, `metadata` a map; S12, no character Claude Code refuses in
-  `name` or the directory name) and `agentskills` (S1, S2 and S5 to S11:
-  claude.ai upload, the Skills API and the Agent Skills specification). The new `[skills] targets`
-  (default `["claude-code"]`) names the readers a repository writes for; S5 to S11 run only with
-  `agentskills` listed, and an unknown target fails the configuration; an empty `targets` or
-  `skill_globs` turns the family off. Frontmatter scalars are read as their text, without YAML 1.1
-  types (docs/rules.md, docs/adr/0007).
-  `config --format json` shows `skills` and the two new `discover` keys; the E0 description now reads
+  `extend_globs`. No R or C rule runs on a `SKILL.md`. Each S id protects one reader or both. For
+  Claude Code, on by default: S1 to S4 and S12 (YAML that parses, fewer than 500 lines, `description`
+  plus `when_to_use` within the skill listing's `[rules.S3] max_chars`, default 1536, `metadata` a
+  map, no character Claude Code refuses in `name` or the directory name). For claude.ai upload, the
+  Skills API and the Agent Skills specification: S1, S2 and S5 to S11, where S5 to S11 are `off` in
+  the default preset and `warn` in the new `preset:agentskills`. An empty `skill_globs` turns the
+  family off. Frontmatter scalars are read as their text, without YAML 1.1 types (docs/rules.md,
+  docs/adr/0007).
+  `config --format json` shows the two new `discover` keys; the E0 description now reads
   "analyzed file".
 - Hook rules H1 to H6 and `.mcp.json` rules M1 to M4, all at `warn`, on two new file families:
   `[discover] hooks_globs` (default `["**/.claude/settings.json", "**/.claude/settings.local.json"]`)
@@ -57,6 +56,12 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ### Changed (breaking)
 
+- `preset:default` is applied once, first, under the config file a run loads; every file in
+  `extends` (a shipped preset or a shared file) is a change on top, even when it names
+  `preset:default` or has no `extends`. Before, each such file applied the whole default again, so a
+  later entry reset what an earlier one set: `extends = ["preset:strict", "team.toml"]` lost every
+  strict setting. A config that relied on that reset changes; a root config with `extends = []` now
+  starts from the default too (docs/adr/0008).
 - JSON findings have a new `fix` field (`null`, or applicability, description and edits); SARIF
   results with a fix have `fixes`, and the run sets `columnKind: "unicodeCodePoints"`. The JSON
   `version` stays 1 (it goes up only when a field is removed or changes meaning), but a consumer that

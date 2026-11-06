@@ -21,14 +21,14 @@ from .errors import (
     LEVELS, ConfigError, check_keys, expect_int, expect_str, expect_str_list, expect_table_list, require_keys,
 )
 from .finding import INPUT_RULE
-from .rules import ALIASES, FAMILIES, INSTRUCTION, MODULES, RETIRED, RULES, SECTIONS, SHARED
+from .rules import ALIASES, FAMILIES, INSTRUCTION, MODULES, RETIRED, RULES, SHARED
 
 CONFIG_NAME = ".agentfile-lint.toml"
 # Migration aid for the 0.4.0 rename; remove at 1.0.
 LEGACY_CONFIG_NAME = ".instruction-lint.toml"
 PRESET_PREFIX = "preset:"
 DEFAULT_PRESET = "preset:default"
-_TOP_KEYS = {"extends", "discover", "allowlist", "shared", "rules", "overrides", "check_pins", *SECTIONS}
+_TOP_KEYS = {"extends", "discover", "allowlist", "shared", "rules", "overrides", "check_pins"}
 # File family -> its `[discover]` glob list (docs/design.md, File families).
 GLOB_KEYS = {family: "globs" if family == INSTRUCTION else f"{family}_globs" for family in FAMILIES}
 # `[discover]` list that concatenates along `extends` -> the glob list it adds to (one per file family).
@@ -78,7 +78,6 @@ class Config:
     overrides: list[overrides_mod.Override] = field(default_factory=list)
     # Every `[discover]` list by key (`GLOB_KEYS` values replace along `extends`, `EXTEND_KEYS` concatenate).
     discover: dict[str, list[str]] = field(default_factory=dict)
-    sections: dict[str, Any] = field(default_factory=dict)  # top-level table a rule module owns -> effective value
     source: Source | None = None  # None: no config file, or one whose text a fix cannot edit
 
     def family_globs(self, family: str) -> list[str]:
@@ -111,7 +110,6 @@ def to_jsonable(cfg: "Config") -> dict[str, Any]:
             for o in cfg.overrides
         ],
         "check_pins": cfg.check_pins,
-        **cfg.sections,
     }
 
 
@@ -157,11 +155,17 @@ def _load_raw(
         base_dir = path.parent
     if key in seen:
         raise ConfigError(f"extends cycle at {ref}")
-    extends = data.get("extends", [DEFAULT_PRESET] if ref != DEFAULT_PRESET else [])
+    extends = data.get("extends", [])
     if isinstance(extends, str):
         extends = [extends]
     if not isinstance(extends, list) or not all(isinstance(e, str) for e in extends):
         raise ConfigError(f"{ref}: extends must be a list of strings")
+    # preset:default is applied once, under the file the run loads, whether a file names it or not;
+    # every other file (shipped preset or shared file) is a change on top. Applying it again under
+    # each file would reset what an earlier `extends` entry set.
+    extends = [e for e in extends if e != DEFAULT_PRESET]
+    if not seen and ref != DEFAULT_PRESET:
+        extends = [DEFAULT_PRESET, *extends]
     merged: dict[str, Any] = {}
     inherited: list[tuple[Any, str, int, bool]] = []
     extend: dict[str, list[Any]] = {name: [] for name in EXTEND_KEYS}
@@ -340,10 +344,7 @@ def _validate(raw: dict[str, Any], today: datetime.date) -> Config:
             if rules_raw[rule_id].get("level") not in LEVELS:
                 raise ConfigError(f"rules.{rule_id}.level: expected one of {', '.join(LEVELS)}")
         tables = {rule_id: rules_raw[rule_id] for rule_id in ids}
-        if hasattr(module, "SECTION"):
-            given = raw.get(module.SECTION)
-        else:
-            given = shared_raw.get(module.SHARED[0]) if hasattr(module, "SHARED") else None
+        given = shared_raw.get(module.SHARED[0]) if hasattr(module, "SHARED") else None
         params[module.__name__], effective = module.validate(given, tables)
         for rule_id in ids:
             # The one source of each id's effective table (defaults filled in), read by the engine for
@@ -360,8 +361,7 @@ def _validate(raw: dict[str, Any], today: datetime.date) -> Config:
     }
     overrides = overrides_mod.parse(raw.get("overrides", []), set(RULES))
     shared = {group: shared_raw[group] for group in SHARED}
-    sections = {name: module.section_json(params[module.__name__]) for name, module in SECTIONS.items()}
     return Config(
         allowlist=settings, entries=entries, rules=rules, shared=shared, params=params,
-        check_pins=pins, overrides=overrides, discover=lists, sections=sections,
+        check_pins=pins, overrides=overrides, discover=lists,
     )

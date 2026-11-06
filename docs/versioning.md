@@ -25,8 +25,9 @@ main command validates it, so it follows the rules for config keys.
 `CHANGELOG.md` follows Keep a Changelog. Every user-visible change has an entry in the section of
 the release that ships it (`Added`, `Changed`, `Fixed`, `Removed`).
 
-- A new rule enters the default preset at `warn`. Whatever its specification calls the intended
-  severity, the preset ships `warn`; a repository raises it with `level = "error"` after a clean run.
+- A new rule enters the default preset at `warn`, or `off` when it is a heuristic (docs/adr/0003) or
+  checks for a reader the default does not target (docs/adr/0007). Whatever its specification calls
+  the intended severity, the preset ships no higher than `warn`; a repository raises it with `level = "error"` after a clean run.
 - Promoting a rule to `error` in the preset is a minor change and must be listed under a
   `### Graduated` heading, one bullet per rule starting with the rule id in backticks.
 - `tests/test_versioning.py` fails when a rule in any shipped preset (`agentfile_lint/presets/*.toml`)

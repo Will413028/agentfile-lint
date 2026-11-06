@@ -40,15 +40,15 @@ new ids.
 | [C1](#c1-claudemd) | `claude-md` | `CLAUDE.md` only imports `AGENTS.md` | convention | off | warn |
 | [S1](#s1-to-s12-skillmd) | `skill-yaml` | `SKILL.md` frontmatter is valid YAML and a mapping | objective | warn | same |
 | [S2](#s1-to-s12-skillmd) | `skill-lines` | `SKILL.md` has fewer than 500 lines | objective | warn | same |
-| [S3](#s1-to-s12-skillmd) | `skill-listing-chars` | `description` plus `when_to_use` fit 1536 characters | objective | warn | same |
+| [S3](#s1-to-s12-skillmd) | `skill-listing-chars` | `description` plus `when_to_use` fit `max_chars` (1536) | objective | warn | same |
 | [S4](#s1-to-s12-skillmd) | `skill-metadata-map` | `metadata` is a map | objective | warn | same |
-| [S5](#s1-to-s12-skillmd) | `skill-frontmatter` | `SKILL.md` has frontmatter | objective, `agentskills` target | warn, not run | same |
-| [S6](#s1-to-s12-skillmd) | `skill-name-length` | `name` is 1 to 64 characters | objective, `agentskills` target | warn, not run | same |
-| [S7](#s1-to-s12-skillmd) | `skill-name-chars` | `name` characters | objective, `agentskills` target | warn, not run | same |
-| [S8](#s1-to-s12-skillmd) | `skill-name-dir` | `name` equals the directory name | objective, `agentskills` target | warn, not run | same |
-| [S9](#s1-to-s12-skillmd) | `skill-description` | `description` is 1 to 1024 characters | objective, `agentskills` target | warn, not run | same |
-| [S10](#s1-to-s12-skillmd) | `skill-compatibility` | `compatibility` is 1 to 500 characters | objective, `agentskills` target | warn, not run | same |
-| [S11](#s1-to-s12-skillmd) | `skill-keys` | only the specification's six frontmatter keys | objective, `agentskills` target | warn, not run | same |
+| [S5](#s1-to-s12-skillmd) | `skill-frontmatter` | `SKILL.md` has frontmatter | objective, for upload (`preset:agentskills`: warn) | off | off |
+| [S6](#s1-to-s12-skillmd) | `skill-name-length` | `name` is 1 to 64 characters | objective, for upload (`preset:agentskills`: warn) | off | off |
+| [S7](#s1-to-s12-skillmd) | `skill-name-chars` | `name` characters | objective, for upload (`preset:agentskills`: warn) | off | off |
+| [S8](#s1-to-s12-skillmd) | `skill-name-dir` | `name` equals the directory name | objective, for upload (`preset:agentskills`: warn) | off | off |
+| [S9](#s1-to-s12-skillmd) | `skill-description` | `description` is 1 to 1024 characters | objective, for upload (`preset:agentskills`: warn) | off | off |
+| [S10](#s1-to-s12-skillmd) | `skill-compatibility` | `compatibility` is 1 to 500 characters | objective, for upload (`preset:agentskills`: warn) | off | off |
+| [S11](#s1-to-s12-skillmd) | `skill-keys` | only the specification's six frontmatter keys | objective, for upload (`preset:agentskills`: warn) | off | off |
 | [S12](#s1-to-s12-skillmd) | `skill-name-refused` | no character Claude Code refuses in `name` or the directory name | objective | warn | same |
 | [H1](#h1-to-h6-hooks) | `settings-json` | a settings file is valid JSON and an object | objective | warn | same |
 | [H2](#h1-to-h6-hooks) | `hooks-event` | hook event names are documented ones | objective | warn | same |
@@ -300,27 +300,29 @@ triggering"). claude.ai upload, the Skills API and `package_skill.py` follow the
 [Agent Skills specification](https://agentskills.io/specification) and fail with a hard error on any
 key outside its six (`name`, `description`, `license`, `compatibility`, `metadata`, `allowed-tools`)
 (the same page, "Using skill frontmatter outside Claude Code"). So every S id belongs to the readers
-it protects, and `[skills] targets` names the readers a repository writes for:
+it protects, and the default preset turns on the ids for Claude Code:
 
-| Id | Reader | Finding | Source |
+| Id | Reader (on in) | Finding | Source |
 |---|---|---|---|
-| S1 | both | the frontmatter is not valid YAML (reported at the parse error's line), has no closing `---`, or is not a mapping | Claude Code: "If the YAML between the markers doesn't parse, the skill still loads with no fields set"; specification: "must contain YAML frontmatter" |
-| S2 | both | the file has 500 lines or more (whole file, counted like R1b) | both: "Keep `SKILL.md` under 500 lines" |
-| S3 | `claude-code` | `description` and `when_to_use` together are more than 1536 characters | Claude Code: "the combined `description` and `when_to_use` text is truncated at 1,536 characters in the skill listing" |
-| S4 | `claude-code` | `metadata` is present and not a map | Claude Code: "drops a value that isn't a map" |
-| S5 | `agentskills` | no frontmatter: the first line is not `---` | specification: "must contain YAML frontmatter" |
-| S6 | `agentskills` | `name` is missing, not a string, empty, or longer than 64 characters | specification: "Must be 1-64 characters" |
-| S7 | `agentskills` | `name` is not lowercase, has a character other than a letter, digit or `-`, starts or ends with `-`, or contains `--` | specification, `name` field |
-| S8 | `agentskills` | `name` differs from the name of the directory that holds the file (not checked for a `SKILL.md` at the repository root, whose directory name depends on the checkout) | specification: "Must match the parent directory name" |
-| S9 | `agentskills` | `description` is missing, not a string, blank, or longer than 1024 characters | specification: "Must be 1-1024 characters" |
-| S10 | `agentskills` | `compatibility` is present and not a string of 1 to 500 characters | specification: "Must be 1-500 characters if provided" |
-| S11 | `agentskills` | a top-level key outside the six | Claude Code, "Using skill frontmatter outside Claude Code" |
-| S12 | `claude-code` | `name`, or the name of the directory that holds the file, has a character Claude Code refuses: `<` or `>`; a control or format character (zero-width, direction-changing); a private-use or unassigned character; a blank other than a plain space; a space at the start or end or two in a row | Claude Code, "Characters a skill name can't hold": a refused `name` is not shown in the `/` menu and does not invoke the skill; a refused directory name keeps the skill from loading, except in a plugin's `skills/`, where the characters become hyphens |
+| S1 | both (default) | the frontmatter is not valid YAML (reported at the parse error's line), has no closing `---`, or is not a mapping | Claude Code: "If the YAML between the markers doesn't parse, the skill still loads with no fields set"; specification: "must contain YAML frontmatter" |
+| S2 | both (default) | the file has 500 lines or more (whole file, counted like R1b) | both: "Keep `SKILL.md` under 500 lines" |
+| S3 | Claude Code (default) | `description` and `when_to_use` together are more than `max_chars` (default 1536) characters | Claude Code: "the combined `description` and `when_to_use` text is truncated at 1,536 characters in the skill listing" |
+| S4 | Claude Code (default) | `metadata` is present and not a map | Claude Code: "drops a value that isn't a map" |
+| S5 | upload (`preset:agentskills`) | no frontmatter: the first line is not `---` | specification: "must contain YAML frontmatter" |
+| S6 | upload (`preset:agentskills`) | `name` is missing, not a string, empty, or longer than 64 characters | specification: "Must be 1-64 characters" |
+| S7 | upload (`preset:agentskills`) | `name` is not lowercase, has a character other than a letter, digit or `-`, starts or ends with `-`, or contains `--` | specification, `name` field |
+| S8 | upload (`preset:agentskills`) | `name` differs from the name of the directory that holds the file (not checked for a `SKILL.md` at the repository root, whose directory name depends on the checkout) | specification: "Must match the parent directory name" |
+| S9 | upload (`preset:agentskills`) | `description` is missing, not a string, blank, or longer than 1024 characters | specification: "Must be 1-1024 characters" |
+| S10 | upload (`preset:agentskills`) | `compatibility` is present and not a string of 1 to 500 characters | specification: "Must be 1-500 characters if provided" |
+| S11 | upload (`preset:agentskills`) | a top-level key outside the six | Claude Code, "Using skill frontmatter outside Claude Code" |
+| S12 | Claude Code (default) | `name`, or the name of the directory that holds the file, has a character Claude Code refuses: `<` or `>`; a control or format character (zero-width, direction-changing); a private-use or unassigned character; a blank other than a plain space; a space at the start or end or two in a row | Claude Code, "Characters a skill name can't hold": a refused `name` is not shown in the `/` menu and does not invoke the skill; a refused directory name keeps the skill from loading, except in a plugin's `skills/`, where the characters become hyphens |
 
-Default: `targets = ["claude-code"]`, so S5 to S11 do not run; the levels are all `warn`. A repository
-that uploads its skills to claude.ai or the Skills API sets `targets = ["claude-code", "agentskills"]`.
-`targets = []` runs no S id, and `[discover] skill_globs = []` stops discovering `SKILL.md` files.
-An id that no listed reader reads does not run whatever its level, and an override cannot turn it on.
+Default: S1 to S4 and S12 at `warn`, S5 to S11 `off` (Claude Code accepts what they report). A
+repository that uploads its skills to claude.ai or the Skills API adds
+`extends = ["preset:agentskills"]`, which sets S5 to S11 to `warn` and combines with `preset:strict`
+in either order; a single id can also be turned on with its level or a raising override, and an id
+for a reader you do not write for can be turned off. `[discover] skill_globs = []` stops discovering
+`SKILL.md` files.
 
 Readings:
 
@@ -338,9 +340,9 @@ Readings:
 - S7 follows `skills-ref` rather than the specification's `a-z` example: the specification says
   "unicode lowercase alphanumeric characters (a-z, 0-9)", which reads two ways, and `skills-ref`
   accepts any Unicode lowercase letter or digit (`données` passes).
-- S3's 1536 is Claude Code's default; Claude Code's `skillListingMaxDescChars` setting changes it, and
-  this tool does not read Claude Code settings. If you raised the cap, turn S3 off for those paths
-  with an override.
+- S3's limit is `[rules.S3] max_chars`, default 1536, Claude Code's default for its
+  `skillListingMaxDescChars` setting; this tool does not read Claude Code settings, so a repository
+  that changed the setting sets the same value here.
 - S10 also reports an empty string, which the specification excludes and `skills-ref` accepts.
 - S12 follows the documented list; which code points count as unassigned follows the Unicode version
   of the Python that runs the check.
@@ -351,8 +353,8 @@ Per-line directives cannot name S ids (docs/design.md, File families); use an al
 override.
 
 Measured: objective, so no false-positive rate. On the 22-repository sample of docs/field-report.md
-(1695 `SKILL.md` files, 2026-11-06): with the default `claude-code` target, S1 reports 1 file, S2
-199 files in 8 repositories and S12 none; with `agentskills` added, S5 reports 4, S7 30, S8 29, S10 3 and S11 877
+(1695 `SKILL.md` files, 2026-11-06): with the default preset, S1 reports 1 file, S2
+199 files in 8 repositories and S12 none; with `preset:agentskills`, S5 reports 4, S7 30, S8 29, S10 3 and S11 877
 files. Compared file by file with `skills-ref` (which fails 929 files), 1435 files get the same
 verdict and the same checks; the other 260 all use a flow collection that strictyaml rejects (S1
 there, valid YAML here, so those files show only their other findings, mostly S11). R and C findings

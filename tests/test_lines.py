@@ -60,8 +60,10 @@ class ConfigJsonTest(unittest.TestCase):
                 self.assertEqual(doc["shared"]["duplicates"].pop("exclude"), [])
                 self.assertEqual(doc["discover"].pop("skill_globs"), ["**/SKILL.md"])        # 0.9.0
                 self.assertEqual(doc["discover"].pop("extend_skill_globs"), [])
-                self.assertEqual(doc.pop("skills"), {"targets": ["claude-code"]})
-                self.assertEqual([doc["rules"].pop(f"S{i}") for i in range(1, 13)], [{"level": "warn"}] * 12)
+                self.assertNotIn("skills", doc)
+                self.assertEqual(doc["rules"].pop("S3"), {"level": "warn", "max_chars": 1536})
+                self.assertEqual([doc["rules"].pop(f"S{i}")["level"] for i in (1, 2, 4, 12)], ["warn"] * 4)
+                self.assertEqual([doc["rules"].pop(f"S{i}") for i in range(5, 12)], [{"level": "off"}] * 7)
                 self.assertEqual(doc["discover"].pop("hooks_globs"), ["**/.claude/settings.json", "**/.claude/settings.local.json"])
                 self.assertEqual(doc["discover"].pop("extend_hooks_globs"), [])
                 self.assertEqual(doc["discover"].pop("mcp_globs"), [".mcp.json"])

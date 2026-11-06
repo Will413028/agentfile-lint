@@ -45,6 +45,11 @@ the `vendor` subcommand writes its copy.
 - One rule id is one check with one level. A module may report several ids (R1a to R1e, R4a and R4b,
   R5a and R5b) from one computation; parameters those ids share live in `[shared.<group>]`, the rest
   in `[rules.<id>]` (docs/adr/0005).
+- Layers: `preset:default` is applied once, first, under the file the run loads (or alone when there
+  is none). Every other file, a shipped preset such as `preset:strict` or a shared file named in
+  `extends`, is a change on top: it holds only the keys it sets, and naming `preset:default` in it
+  has no further effect. A file's `extends` entries apply in order, then the file itself, so a later
+  entry wins over an earlier one only on the keys it sets (docs/adr/0008).
 - Merge: tables merge key by key (the child wins); every other value, lists included, is replaced.
   Two lists concatenate along the `extends` chain instead, parents first: `[[overrides]]`, because
   replacing them would silently drop the overrides of the config a file extends (a child removes an
@@ -97,10 +102,9 @@ text in a `SKILL.md` body is skill content, and its frontmatter cannot hold an H
 has no comments, so S, H and M ids cannot be named in a directive (an allowlist entry or an override
 covers them). An empty glob list turns its family off, except `globs`, which must stay non-empty.
 
-Which S ids run also depends on `[skills] targets` (default `["claude-code"]`): each S id belongs to
-the readers it protects, and an id that no listed reader reads does not run, whatever its level or an
-override says (docs/rules.md, S1 to S12; docs/adr/0007). Unknown targets fail the configuration; an
-empty `targets` or `skill_globs` turns the skill family off (`globs` must stay non-empty).
+Which S ids run is their level only. The default preset turns on the ids for Claude Code;
+`preset:agentskills` adds the ids for claude.ai upload and the Skills API (docs/rules.md, S1 to S12;
+docs/adr/0007). An empty `skill_globs` turns the skill family off (`globs` must stay non-empty).
 
 File names given on the command line are not used to narrow the analysis: cross-file rules and the
 allowlist "no longer needed" check need the whole set, and a partial view would make them pass locally

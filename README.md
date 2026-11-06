@@ -58,8 +58,8 @@ services/api/AGENTS.md:5: warning: R6: possible copied constant '`MAX_RETRIES = 
 | `R5b` | off | warn | identical lines in sibling files |
 | `R6` | off | warn | candidates for constants copied from code (heuristic, always a warning) |
 | `C1` | off | warn | `CLAUDE.md` is only the line `@AGENTS.md` (`import-only`) or absent (`forbid`) |
-| `S1`–`S4`, `S12` | warn | warn | `SKILL.md` for Claude Code: frontmatter is valid YAML, under 500 lines, `description` plus `when_to_use` within 1536 characters, `metadata` is a map, no character Claude Code refuses in `name` or the directory name |
-| `S5`–`S11` | not run | not run | `SKILL.md` for claude.ai upload and the Skills API (`[skills] targets`, below): frontmatter present, `name` and `description` limits, `name` equals its directory, only the specification's six keys |
+| `S1`–`S4`, `S12` | warn | warn | `SKILL.md` for Claude Code: frontmatter is valid YAML, under 500 lines, `description` plus `when_to_use` within `[rules.S3] max_chars` (1536), `metadata` is a map, no character Claude Code refuses in `name` or the directory name |
+| `S5`–`S11` | off | off | `SKILL.md` for claude.ai upload and the Skills API (`preset:agentskills`, below): frontmatter present, `name` and `description` limits, `name` equals its directory, only the specification's six keys |
 | `allowlist` | error | error | exceptions: expired, no-longer-needed or miscounted (`count` above or below the findings) allowlist entries fail, entries warn before they expire; an override glob that matches no file warns |
 | `disable` | error | error | per-line directives: a malformed one fails, one that suppresses nothing warns |
 
@@ -89,11 +89,13 @@ extend_globs = ["GEMINI.md", "**/GEMINI.md", ".github/copilot-instructions.md"]
 Code and the Agent Skills specification read them differently: Claude Code ignores fields it does not
 know and accepts a `name` that differs from the directory, while claude.ai upload and the Skills API
 reject any key outside the specification's six. The default checks for Claude Code; if you also upload
-your skills, add the second reader:
+your skills, add the checks for the second reader:
 
 ```toml
-[skills]
-targets = ["claude-code", "agentskills"]
+extends = ["preset:agentskills"]   # with preset:strict too: ["preset:strict", "preset:agentskills"]
+
+[rules.S3]
+max_chars = 1536                   # Claude Code's default skillListingMaxDescChars; match yours
 ```
 
 `[discover] skill_globs` replaces the `SKILL.md` glob list and `extend_skill_globs` adds to it, as
@@ -184,10 +186,12 @@ a fixed list and does not read `.gitignore`.
 
 ## Configuration
 
-`.agentfile-lint.toml` at the repository root extends the shipped preset. Unknown keys fail.
+`.agentfile-lint.toml` at the repository root is applied on top of the default preset, and each
+`extends` entry (a shipped preset or a path) is applied in order before it, each one changing only the
+keys it sets. Unknown keys fail.
 
 ```toml
-extends = ["preset:default"]        # default; other entries are paths relative to this file
+extends = ["preset:strict"]         # optional; other entries are paths relative to this file
 
 [discover]
 globs = ["AGENTS.md", "**/AGENTS.md"]
