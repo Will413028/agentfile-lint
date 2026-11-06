@@ -5,6 +5,8 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-06
+
 ### Added
 
 - `agentfile_lint/_yaml/`: the pure-Python part of PyYAML 6.0.3 (MIT), vendored unchanged with its
