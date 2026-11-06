@@ -1,6 +1,6 @@
 """Find `[[allowlist.entries]]` blocks and their `count` line in the text of a TOML file.
 
-Not a TOML parser (the runner has no TOML writer, and the standard library none either): it reads
+Not a TOML parser (the checker has no TOML writer, and the standard library none either): it reads
 lines, so a multi-line string or array can fool it. Every edit built from what it finds goes through
 `fix.toml_checked` (safety net 1), which re-parses the result; when it is fooled, the fix is dropped.
 """
