@@ -1,10 +1,11 @@
-"""S1 to S13: SKILL.md files, grouped by the reader that would break (docs/adr/0007).
+"""S1 to S14: SKILL.md files, grouped by the reader that would break (docs/adr/0007).
 
 Two readers treat the same file differently. Claude Code ignores fields it does not know, takes a
 `name` that differs from the directory and loads a skill whose YAML does not parse with no fields set.
 claude.ai upload, the Skills API and the Agent Skills specification reject a key outside the
 specification's six. Each id protects one reader or both (docs/rules.md); the default preset turns
 on the Claude Code ids, and `preset:agentskills` adds the others. Which ids run is only their level.
+S13 and S14 are about the body, whoever reads it: its size after compaction and the files it links to.
 
 Runs on the skill file family (`[discover] skill_globs`), never on instruction files. Frontmatter
 scalars are read as their text (`frontmatter.parse(strings=True)`): YAML 1.1 type resolution would
@@ -14,13 +15,17 @@ sees.
 from __future__ import annotations
 
 import posixpath
+import re
 import unicodedata
 from typing import Any
+from urllib.parse import unquote
 
 from .. import frontmatter
+from ..context import Context
+from ..discover import SKIP_DIRS
 from ..errors import check_keys, expect_int, levels_only
 from ..finding import Finding
-from ._text import split_lines
+from ._text import SPAN, parent_dirs, prose_lines, split_lines
 
 FAMILY = "skill"
 
@@ -38,6 +43,7 @@ CHECKS = (
     ("S11", "skill-keys", "only the specification's six frontmatter keys"),
     ("S12", "skill-name-refused", "name and directory name hold no character Claude Code refuses"),
     ("S13", "skill-compaction-tokens", "the body fits what Claude Code keeps of a skill after compaction (max_tokens, estimated)"),
+    ("S14", "skill-links", "a relative Markdown link in SKILL.md points to a tracked file or directory"),
 )
 WHOLE_FILE = ("S2", "S5", "S13")   # S12 on a directory name is line 0 too; S ids take no directive anyway
 
@@ -66,6 +72,52 @@ def validate(shared: Any, tables: dict[str, dict[str, Any]]) -> tuple[dict[str, 
 
 def check(path: str, text: str, params: dict[str, Any], levels: dict[str, str]) -> list[Finding]:
     return _check(path, text, params["max_listing"]) + _compaction(path, text, params["max_tokens"])
+
+
+# An inline link `[text](target)` or `[text](target "title")`, not escaped; the target may hold one
+# level of parentheses. Images are cut out first, so the image inside a linked image is not read.
+_TARGET = r"\(\s*<?((?:[^()\s<>]|\([^()\s]*\))+)>?(?:\s+(?:\"[^\"\n]*\"|'[^'\n]*'))?\s*\)"
+_LINK = re.compile(r"(?<![!\\])\[[^\]\n]*\]" + _TARGET)
+_IMAGE = re.compile(r"!\[[^\]\n]*\]" + _TARGET)
+# Not a path in the repository: a URL scheme, an anchor, a site-absolute path, a template placeholder.
+_NOT_A_PATH = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:|[#/]|.*[{}<>$]")
+
+
+def check_repo(ctx: Context, params: dict[str, Any], levels: dict[str, str]) -> list[Finding]:
+    """S14: links out of a SKILL.md are how the skill sends an agent to its reference files; a target
+    that is not tracked is a file the agent is told to read and cannot."""
+    found: list[Finding] = []
+    if levels["S14"] == "off":
+        return found
+    for path, text in ctx.family_files.get(FAMILY, {}).items():
+        split = frontmatter.split(text)
+        body_start = split[1] if split is not None else 0   # an unterminated block: the whole file is body
+        directory = posixpath.dirname(path)
+        # Only the body: a fence or comment opened inside the frontmatter says nothing about the body.
+        body = "\n".join(text.split("\n")[body_start:])
+        for offset, line in prose_lines(body):
+            number = offset + body_start
+            # A code span or an image becomes a blank, so the text around it is not joined into a link.
+            for m in _LINK.finditer(_IMAGE.sub(" ", SPAN.sub(" ", line))):
+                target = unquote(re.split(r"[#?]", m.group(1))[0])
+                # A bare word (`[text](url)` in an example) is not taken for a file name.
+                if not target or _NOT_A_PATH.match(m.group(1)) or ("/" not in target and "." not in target):
+                    continue
+                resolved = posixpath.normpath(posixpath.join(directory, target))
+                if resolved == ".." or resolved.startswith("../"):
+                    continue   # outside the repository: not ours to know
+                if resolved == "." or resolved in ctx.dirs:
+                    continue
+                # A tracked entry named with a trailing slash must be a directory: a symlink to one or a submodule.
+                if resolved in ctx.tracked_set and (not target.endswith("/") or (ctx.root / resolved).is_dir()):
+                    continue
+                # Below a tracked symlink or submodule, or in a directory a `--no-git` walk never
+                # enters: the file list does not show what is there.
+                if any(d in ctx.tracked_set for d in parent_dirs(resolved + "/x")) or SKIP_DIRS & set(resolved.split("/")):
+                    continue
+                found.append(Finding(path, number, "S14", f"link target `{target}` is not a tracked file or directory "
+                                     f"(looked for {resolved}); an agent that follows the link finds nothing"))
+    return found
 
 
 def estimated_tokens(text: str) -> int:

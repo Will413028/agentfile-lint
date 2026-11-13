@@ -38,19 +38,20 @@ new ids.
 | [R5b](#r5a-and-r5b-duplicates) | `sibling-duplicates` | lines repeated in other files | heuristic | off | warn |
 | [R6](#r6-copied-constants) | `constants` | values copied from code | heuristic | off | warn |
 | [C1](#c1-claudemd) | `claude-md` | `CLAUDE.md` only imports `AGENTS.md` | convention | off | warn |
-| [S1](#s1-to-s13-skillmd) | `skill-yaml` | `SKILL.md` frontmatter is valid YAML and a mapping | objective | warn | same |
-| [S2](#s1-to-s13-skillmd) | `skill-lines` | `SKILL.md` has fewer than 500 lines | objective | warn | same |
-| [S3](#s1-to-s13-skillmd) | `skill-listing-chars` | `description` plus `when_to_use` fit `max_chars` (1536) | objective | warn | same |
-| [S4](#s1-to-s13-skillmd) | `skill-metadata-map` | `metadata` is a map | objective | warn | same |
-| [S5](#s1-to-s13-skillmd) | `skill-frontmatter` | `SKILL.md` has frontmatter | objective, for upload (`preset:agentskills`: warn) | off | off |
-| [S6](#s1-to-s13-skillmd) | `skill-name-length` | `name` is 1 to 64 characters | objective, for upload (`preset:agentskills`: warn) | off | off |
-| [S7](#s1-to-s13-skillmd) | `skill-name-chars` | `name` characters | objective, for upload (`preset:agentskills`: warn) | off | off |
-| [S8](#s1-to-s13-skillmd) | `skill-name-dir` | `name` equals the directory name | objective, for upload (`preset:agentskills`: warn) | off | off |
-| [S9](#s1-to-s13-skillmd) | `skill-description` | `description` is 1 to 1024 characters | objective, for upload (`preset:agentskills`: warn) | off | off |
-| [S10](#s1-to-s13-skillmd) | `skill-compatibility` | `compatibility` is 1 to 500 characters | objective, for upload (`preset:agentskills`: warn) | off | off |
-| [S11](#s1-to-s13-skillmd) | `skill-keys` | only the specification's six frontmatter keys | objective, for upload (`preset:agentskills`: warn) | off | off |
-| [S12](#s1-to-s13-skillmd) | `skill-name-refused` | no character Claude Code refuses in `name` or the directory name | objective | warn | same |
-| [S13](#s1-to-s13-skillmd) | `skill-compaction-tokens` | the body fits the tokens Claude Code keeps after compaction (`max_tokens`, 5000) | estimate | off | warn |
+| [S1](#s1-to-s14-skillmd) | `skill-yaml` | `SKILL.md` frontmatter is valid YAML and a mapping | objective | warn | same |
+| [S2](#s1-to-s14-skillmd) | `skill-lines` | `SKILL.md` has fewer than 500 lines | objective | warn | same |
+| [S3](#s1-to-s14-skillmd) | `skill-listing-chars` | `description` plus `when_to_use` fit `max_chars` (1536) | objective | warn | same |
+| [S4](#s1-to-s14-skillmd) | `skill-metadata-map` | `metadata` is a map | objective | warn | same |
+| [S5](#s1-to-s14-skillmd) | `skill-frontmatter` | `SKILL.md` has frontmatter | objective, for upload (`preset:agentskills`: warn) | off | off |
+| [S6](#s1-to-s14-skillmd) | `skill-name-length` | `name` is 1 to 64 characters | objective, for upload (`preset:agentskills`: warn) | off | off |
+| [S7](#s1-to-s14-skillmd) | `skill-name-chars` | `name` characters | objective, for upload (`preset:agentskills`: warn) | off | off |
+| [S8](#s1-to-s14-skillmd) | `skill-name-dir` | `name` equals the directory name | objective, for upload (`preset:agentskills`: warn) | off | off |
+| [S9](#s1-to-s14-skillmd) | `skill-description` | `description` is 1 to 1024 characters | objective, for upload (`preset:agentskills`: warn) | off | off |
+| [S10](#s1-to-s14-skillmd) | `skill-compatibility` | `compatibility` is 1 to 500 characters | objective, for upload (`preset:agentskills`: warn) | off | off |
+| [S11](#s1-to-s14-skillmd) | `skill-keys` | only the specification's six frontmatter keys | objective, for upload (`preset:agentskills`: warn) | off | off |
+| [S12](#s1-to-s14-skillmd) | `skill-name-refused` | no character Claude Code refuses in `name` or the directory name | objective | warn | same |
+| [S13](#s1-to-s14-skillmd) | `skill-compaction-tokens` | the body fits the tokens Claude Code keeps after compaction (`max_tokens`, 5000) | estimate | off | warn |
+| [S14](#s1-to-s14-skillmd) | `skill-links` | a relative Markdown link points to a tracked file or directory | objective | warn | same |
 | [P1](#p1-to-p5-rule-files) | `rule-yaml` | a rule file's frontmatter is valid YAML | objective | warn | same |
 | [P2](#p1-to-p5-rule-files) | `rule-paths-type` | `paths` is a glob or a list of globs | objective | warn | same |
 | [P3](#p1-to-p5-rule-files) | `rule-paths-match` | every `paths` pattern matches a tracked file | objective | warn | same |
@@ -298,7 +299,7 @@ Malformed directives get no fix.
 
 Measured: objective, so no false-positive rate.
 
-## S1 to S13 SKILL.md
+## S1 to S14 SKILL.md
 
 Why: a `SKILL.md` has two kinds of reader, and they disagree. Claude Code ignores a frontmatter field
 it does not know, takes a `name` that differs from the directory (or no `name` at all), and when the
@@ -328,8 +329,10 @@ it protects, and the default preset turns on the ids for Claude Code:
 
 | S13 | Claude Code (`preset:strict`) | the body (the file without its frontmatter) is estimated at more than `max_tokens` (default 5000) tokens (whole file) | Claude Code, "Skill content lifecycle": after compaction it re-attaches each invoked skill, "keeping the first 5,000 tokens of each" |
 
-Default: S1 to S4 and S12 at `warn`, S5 to S11 `off` (Claude Code accepts what they report), S13 `off`
-(an estimate; `preset:strict` sets it to `warn`). A
+| S14 | both (default) | an inline Markdown link in the body whose relative target is not a tracked file or directory | specification, "File references": "When referencing other files in your skill, use relative paths from the skill root"; the link is how a skill sends the agent to its reference files |
+
+Default: S1 to S4, S12 and S14 at `warn`, S5 to S11 `off` (Claude Code accepts what they report), S13
+`off` (an estimate; `preset:strict` sets it to `warn`). A
 repository that uploads its skills to claude.ai or the Skills API adds
 `extends = ["preset:agentskills"]`, which sets S5 to S11 to `warn` and combines with `preset:strict`
 in either order; a single id can also be turned on with its level or a raising override, and an id
@@ -359,6 +362,16 @@ Readings:
   near English prose and code (about four characters a token) and near CJK text (about one). The real
   count depends on the model, so the rule is off by default and never more than a hint that the end
   of a long skill is what a compacted session loses. `[rules.S13] max_tokens` changes the limit.
+- S14 reads inline links (`[text](target)`, with or without a title) in the body, outside fenced
+  code, code spans and HTML comments. The target is resolved from the directory of the `SKILL.md`,
+  after removing `#fragment` and `?query` and decoding `%20`; it must be a tracked file or a
+  directory that holds one, with the same letter case (a checkout on Linux is case-sensitive). Not
+  read: images, reference-style links, a link whose `[` is escaped, a target with a URL scheme, an anchor, a leading `/`, a
+  placeholder (`{`, `<`, `$`), a bare word without `/` or `.` (`[text](url)` in an example), and a
+  target outside the repository, below a tracked symlink or submodule, or in a directory a
+  `--no-git` walk skips. Indented code blocks are read like prose (a nested list is indented the same
+  way), so an example link there is reported. A link that leaves the skill's own directory is not reported when
+  its target exists, although it breaks once the skill is installed on its own.
 - S10 also reports an empty string, which the specification excludes and `skills-ref` accepts.
 - S12 follows the documented list; which code points count as unassigned follows the Unicode version
   of the Python that runs the check.
@@ -375,6 +388,13 @@ files. Compared file by file with `skills-ref` (which fails 929 files), 1435 fil
 verdict and the same checks; the other 260 all use a flow collection that strictyaml rejects (S1
 there, valid YAML here, so those files show only their other findings, mostly S11). R and C findings
 on the sample are the same as 0.8.0's.
+
+S14 on the same sample (2026-11-13; 1305 relative links in the 1695 files): 34 findings in 3
+repositories, read one by one, all real. 23 are in skills copied into another tool's directory with
+their links left as they were, 6 point to a sibling skill that does not exist, and 5 are the tail of a
+web URL written as a relative path. Four other candidate checks counted on the sample the same day
+found nothing and were not built: relative links in instruction files (436 links), `@path` imports
+(17), subagent frontmatter (4 files) and hook commands that name a script in the repository (3).
 
 ## P1 to P5 rule files
 

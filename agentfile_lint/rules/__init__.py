@@ -14,7 +14,8 @@ Each module exposes:
   params and, for each of its ids, its effective `[rules.<id>]` table (defaults filled in; `level`
   is set from the merged table), which `Config.rules` and `config --format json` show.
 - `check(path, text, params, levels)` (one file, newlines normalized) and/or
-  `check_repo(ctx, params, levels)` (the whole tracked set); `levels` maps each of its ids to its level.
+  `check_repo(ctx, params, levels)` (the whole tracked set; a module of another family finds its
+  files in `ctx.family_files`); `levels` maps each of its ids to its level.
   The engine runs a module once unless all its ids are off and drops findings of an id that is off.
 Rules read parameters only; repo-specific behaviour is configuration, never a branch in code.
 """

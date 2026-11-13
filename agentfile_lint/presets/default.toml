@@ -223,10 +223,10 @@ mode = "import-only"
 import_line = "@AGENTS.md"
 
 # ---------------------------------------------------------------------------------------------
-# S1 to S13: SKILL.md (docs/rules.md, "S1 to S13 SKILL.md"; docs/adr/0007). Two readers read these
+# S1 to S14: SKILL.md (docs/rules.md, "S1 to S14 SKILL.md"; docs/adr/0007). Two readers read these
 # files differently; each id protects one or both:
-#   Claude Code: S1 to S4, S12 (on here)
-#   claude.ai upload, the Skills API and the Agent Skills specification: S1, S2, S5 to S11
+#   Claude Code: S1 to S4, S12, S14 (on here), S13 (an estimate: off here, on in preset:strict)
+#   claude.ai upload, the Skills API and the Agent Skills specification: S1, S2, S5 to S11, S14
 # S5 to S11 are off: Claude Code accepts what they report. A repository that uploads its skills adds
 # `extends = ["preset:agentskills"]`, or turns single ids on with their level.
 # ---------------------------------------------------------------------------------------------
@@ -274,6 +274,10 @@ level = "warn"
 [rules.S13]
 level = "off"
 max_tokens = 5000
+
+# S14: a relative Markdown link in a SKILL.md body whose target is not a tracked file or directory.
+[rules.S14]
+level = "warn"
 
 # ---------------------------------------------------------------------------------------------
 # P1 to P5: Claude Code rule files, the instruction files inside a `.claude/rules/` directory
