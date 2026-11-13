@@ -1,4 +1,4 @@
-"""S1 to S12: SKILL.md files, grouped by the reader that would break (docs/adr/0007).
+"""S1 to S13: SKILL.md files, grouped by the reader that would break (docs/adr/0007).
 
 Two readers treat the same file differently. Claude Code ignores fields it does not know, takes a
 `name` that differs from the directory and loads a skill whose YAML does not parse with no fields set.
@@ -37,8 +37,9 @@ CHECKS = (
     ("S10", "skill-compatibility", "compatibility is a string of 1 to 500 characters"),
     ("S11", "skill-keys", "only the specification's six frontmatter keys"),
     ("S12", "skill-name-refused", "name and directory name hold no character Claude Code refuses"),
+    ("S13", "skill-compaction-tokens", "the body fits what Claude Code keeps of a skill after compaction (max_tokens, estimated)"),
 )
-WHOLE_FILE = ("S2", "S5")   # S12 on a directory name is line 0 too; S ids take no directive anyway
+WHOLE_FILE = ("S2", "S5", "S13")   # S12 on a directory name is line 0 too; S ids take no directive anyway
 
 NON_STRING_KEY = "a mapping key is not a string"
 MAX_LINES = 499         # "Keep SKILL.md under 500 lines"
@@ -53,13 +54,38 @@ def validate(shared: Any, tables: dict[str, dict[str, Any]]) -> tuple[dict[str, 
     check_keys(s3, {"level", "max_chars"}, "rules.S3")
     # The preset sets 1536, Claude Code's default `skillListingMaxDescChars`.
     max_listing = expect_int(s3.get("max_chars"), "rules.S3.max_chars")
-    effective = levels_only({rule_id: table for rule_id, table in tables.items() if rule_id != "S3"})
+    s13 = tables["S13"]
+    check_keys(s13, {"level", "max_tokens"}, "rules.S13")
+    # The preset sets 5000, what Claude Code keeps of each invoked skill when it compacts the conversation.
+    max_tokens = expect_int(s13.get("max_tokens"), "rules.S13.max_tokens")
+    effective = levels_only({rule_id: table for rule_id, table in tables.items() if rule_id not in ("S3", "S13")})
     effective["S3"] = {"max_chars": max_listing}
-    return {"max_listing": max_listing}, effective
+    effective["S13"] = {"max_tokens": max_tokens}
+    return {"max_listing": max_listing, "max_tokens": max_tokens}, effective
 
 
 def check(path: str, text: str, params: dict[str, Any], levels: dict[str, str]) -> list[Finding]:
-    return _check(path, text, params["max_listing"])
+    return _check(path, text, params["max_listing"]) + _compaction(path, text, params["max_tokens"])
+
+
+def estimated_tokens(text: str) -> int:
+    """A tokenizer-free estimate: four ASCII characters or one other character to a token. English
+    prose and code run near four characters a token and CJK text near one; the real count depends
+    on the model."""
+    ascii_chars = sum(1 for c in text if c < "\x80")
+    return (ascii_chars + 3) // 4 + len(text) - ascii_chars
+
+
+def _compaction(path: str, text: str, max_tokens: int) -> list[Finding]:
+    """S13 on the body, the text an invocation puts in the conversation (the frontmatter is not part of it)."""
+    found = frontmatter.split(text)
+    body = text if found is None or found[1] == 0 else "\n".join(text.split("\n")[found[1]:])
+    tokens = estimated_tokens(body.strip())
+    if tokens <= max_tokens:
+        return []
+    return [Finding(path, 0, "S13", f"body is about {tokens} tokens (estimated at 4 ASCII or 1 other character "
+                    f"per token); after compaction Claude Code keeps only the first {max_tokens} tokens of an "
+                    "invoked skill, so the end of this one is lost in a long session")]
 
 
 def _refused(name: str) -> str | None:

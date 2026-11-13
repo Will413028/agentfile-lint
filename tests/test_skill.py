@@ -1,4 +1,4 @@
-"""SKILL.md rules (S1 to S12), grouped by reader (docs/adr/0007, docs/rules.md "S1 to S12 SKILL.md")."""
+"""SKILL.md rules (S1 to S13), grouped by reader (docs/adr/0007, docs/rules.md "S1 to S13 SKILL.md")."""
 import json
 import unittest
 
@@ -323,6 +323,41 @@ class DiscoveryAndConfigTest(unittest.TestCase):
         root = make_repo({"s/a/SKILL.md": "---\n- x\n---\n"}, symlinks={"t/a/SKILL.md": "../../s/a/SKILL.md"})
         r = run_new(root, "--format", "json", "--today", "2026-11-06")
         self.assertEqual(sorted(f["file"] for f in json.loads(r.stdout)["findings"]), ["s/a/SKILL.md", "t/a/SKILL.md"])
+
+
+class CompactionTest(unittest.TestCase):
+    """S13: Claude Code keeps the first `max_tokens` tokens of an invoked skill after compaction."""
+
+    STRICT = 'extends = ["preset:strict"]\n'
+
+    def skill(self, body: str) -> dict[str, str]:
+        return {"s/pdf/SKILL.md": GOOD + body}
+
+    def test_off_by_default_and_a_warning_in_strict(self):
+        files = self.skill("word " * 5000)                       # 25,000 ASCII characters: about 6,250 tokens
+        self.assertEqual(rules_of(files), [])
+        found, r, doc = lint(files, self.STRICT)
+        self.assertEqual((found, r.returncode), ([("s/pdf/SKILL.md", None, "S13")], 0))
+        self.assertIn("about 6252 tokens", doc["findings"][0]["message"])
+        self.assertIn("first 5000 tokens", doc["findings"][0]["message"])
+
+    def test_estimate_counts_four_ascii_or_one_other_character_per_token(self):
+        from agentfile_lint.rules.skill import estimated_tokens
+        self.assertEqual([estimated_tokens(s) for s in ("", "a", "abcd", "abcde", "\u6587\u5b57", "ab\u6587")], [0, 1, 1, 2, 2, 2])
+
+    def test_limit_is_on_the_body_without_the_frontmatter(self):
+        config = self.STRICT + "[rules.S13]\nmax_tokens = 10\n"
+        long_description = "---\nname: pdf\ndescription: " + "d" * 400 + "\n---\n"
+        self.assertEqual(rules_of({"s/pdf/SKILL.md": long_description + "x" * 40 + "\n"}, config), [])
+        self.assertEqual(rules_of({"s/pdf/SKILL.md": long_description + "x" * 41 + "\n"}, config), ["S13"])
+        self.assertEqual(rules_of({"s/pdf/SKILL.md": "\u6587" * 10}, config), [])
+        self.assertEqual(rules_of({"s/pdf/SKILL.md": "\u6587" * 11}, config), ["S13"])
+
+    def test_max_tokens_must_be_a_positive_integer(self):
+        root = make_repo({"s/pdf/SKILL.md": GOOD, ".agentfile-lint.toml": "[rules.S13]\nmax_tokens = 0\n"})
+        r = run_new(root)
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("rules.S13.max_tokens", r.stderr)
 
 
 if __name__ == "__main__":
