@@ -5,6 +5,8 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-14
+
 ### Added
 
 - Rule-file rules P1 to P5, at `warn`, for the instruction files inside a `.claude/rules/` directory.

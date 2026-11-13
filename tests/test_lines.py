@@ -69,7 +69,7 @@ class ConfigJsonTest(unittest.TestCase):
                 self.assertEqual(doc["discover"].pop("mcp_globs"), [".mcp.json"])
                 self.assertEqual(doc["discover"].pop("extend_mcp_globs"), [])
                 self.assertEqual([doc["rules"].pop(f"H{i}") for i in range(1, 9)], [{"level": "warn"}] * 8)
-                # After 0.9.0: subagent files (A1 to A5) and the project directory spellings of H7 and H8.
+                # 0.10.0: subagent files (A1 to A5) and the project directory spellings of H7 and H8.
                 self.assertEqual(doc["discover"].pop("agents_globs"), ["**/.claude/agents/**/*.md"])
                 self.assertEqual(doc["discover"].pop("extend_agents_globs"), [])
                 self.assertEqual(doc["shared"].pop("hooks"), {"project_dir": ["$CLAUDE_PROJECT_DIR", "${CLAUDE_PROJECT_DIR}"]})
@@ -77,7 +77,7 @@ class ConfigJsonTest(unittest.TestCase):
                 self.assertEqual([doc["rules"].pop(f"A{i}") for i in (1, 3, 4, 5)], [{"level": "warn"}] * 4)
                 self.assertEqual([doc["rules"].pop(f"M{i}") for i in range(1, 5)], [{"level": "warn"}] * 4)
                 self.assertEqual(doc["rules"].pop("R1e")["level"], "warn")
-                # After 0.9.0: rule files (P1 to P5) and the compaction estimate (S13, strict only).
+                # 0.10.0: rule files (P1 to P5) and the compaction estimate (S13, strict only).
                 self.assertEqual([doc["rules"].pop(f"P{i}")["level"] for i in (1, 2, 3, 5)], ["warn"] * 4)
                 self.assertEqual(doc["rules"].pop("P4"), {"level": "warn", "keys": ["path", "glob", "globs"]})
                 self.assertEqual(doc["rules"].pop("S14"), {"level": "warn"})
