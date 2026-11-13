@@ -16,6 +16,17 @@ versions follow [Semantic Versioning](https://semver.org/).
   `glob`, `globs`, and `paths` in another case). P5 (`rule-paths-item`): a `paths` list item is not a
   string. Per-line directives cannot name them. Patterns are read as Claude Code reads them (docs/rules.md, "P1 to P5
   rule files"; behaviour measured with Claude Code 2.1.323).
+- Subagent-file rules A1 to A5, at `warn`, on a new file family: `[discover] agents_globs` (default
+  `["**/.claude/agents/**/*.md"]`) and `extend_agents_globs`. A file Claude Code cannot read as a
+  subagent is silently not offered: A1 (`agent-yaml`) the frontmatter does not parse, A2
+  (`agent-frontmatter`) there is none (`[rules.A2] ignore`, default `**/README.md`), A3 (`agent-name`)
+  and A4 (`agent-description`) the field is missing or not a string, A5 (`agent-duplicate-name`) two
+  files of one agents directory share a `name`. On 60 public repositories with subagent files or
+  hooks: 26 files in 5 repositories (docs/rules.md).
+- H7 (`hooks-command-path`) and H8 (`hooks-command-exec`), at `warn`: a hook command names a script
+  under the project directory that does not exist, or runs one directly that has no execute
+  permission; either way the hook silently does not run. `[shared.hooks] project_dir` lists the
+  spellings of the project directory (default `$CLAUDE_PROJECT_DIR` and `${CLAUDE_PROJECT_DIR}`).
 - S14 (`skill-links`), at `warn`: an inline Markdown link in a `SKILL.md` body whose relative target is
   not a tracked file or directory. On the 22-repository sample it reports 34 links in 3 repositories,
   all real (docs/rules.md).
