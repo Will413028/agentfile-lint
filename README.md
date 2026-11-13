@@ -60,7 +60,12 @@ services/api/AGENTS.md:5: warning: R6: possible copied constant '`MAX_RETRIES = 
 | `C1` | off | warn | `CLAUDE.md` is only the line `@AGENTS.md` (`import-only`) or absent (`forbid`) |
 | `S1`–`S4`, `S12` | warn | warn | `SKILL.md` for Claude Code: frontmatter is valid YAML, under 500 lines, `description` plus `when_to_use` within `[rules.S3] max_chars` (1536), `metadata` is a map, no character Claude Code refuses in `name` or the directory name |
 | `S5`–`S11` | off | off | `SKILL.md` for claude.ai upload and the Skills API (`preset:agentskills`, below): frontmatter present, `name` and `description` limits, `name` equals its directory, only the specification's six keys |
-| `allowlist` | error | error | exceptions: expired, no-longer-needed or miscounted (`count` above or below the findings) allowlist entries fail, entries warn before they expire; an override glob that matches no file warns |
+| `S13` | off | warn | `SKILL.md` body within the 5,000 tokens Claude Code keeps of an invoked skill after compaction (estimated without a tokenizer) |
+| `S14` | warn | warn | a relative Markdown link in a `SKILL.md` body points to a tracked file or directory |
+| `P1`–`P5` | warn | warn | rule files in `.claude/rules/`: the frontmatter parses, `paths` is a glob or a list of globs, every pattern matches a tracked file, no look-alike key (`globs`) instead of `paths`, every list item is a string; each mistake silently loads the rule in every session or never |
+| `A1`–`A5` | warn | warn | subagent files in `.claude/agents/`: the frontmatter parses, the file has frontmatter, `name` and `description` are there, no two share a `name`; otherwise Claude Code silently does not load the subagent |
+| `H7`, `H8` | warn | warn | a script a hook command names under `$CLAUDE_PROJECT_DIR` exists, and has execute permission when the command runs it directly |
+| `allowlist` | as the entry's rule | as the entry's rule | exceptions: expired, no-longer-needed or miscounted (`count` above or below the findings) allowlist entries fail when their rule is an `error` on that file and warn when it is `warn` or `off`; entries warn before they expire; an override glob that matches no file warns |
 | `disable` | error | error | per-line directives: a malformed one fails, one that suppresses nothing warns |
 
 Every rule except `R1a` and `R1c` ships at `warn` or `off`; raise a rule to `error` in your own config once it is
@@ -99,7 +104,7 @@ max_chars = 1536                   # Claude Code's default skillListingMaxDescCh
 ```
 
 `[discover] skill_globs` replaces the `SKILL.md` glob list and `extend_skill_globs` adds to it, as
-`globs` and `extend_globs` do for instruction files. Details: [`docs/rules.md`](docs/rules.md#s1-to-s12-skillmd).
+`globs` and `extend_globs` do for instruction files. Details: [`docs/rules.md`](docs/rules.md#s1-to-s14-skillmd).
 
 ### Hooks and MCP settings
 
@@ -109,9 +114,10 @@ checked by the H rules and the root `.mcp.json` by the M rules: that each is val
 documented event names and handler types with their required fields, that a command hook has a
 command, and that each MCP server has a known `type` and its `command` or `url`. These are the cases in
 which Claude Code skips the file or the entry, often with no sign during a session. Optional fields
-and other settings keys are not checked. `hooks_globs`/`extend_hooks_globs` and
-`mcp_globs`/`extend_mcp_globs` in `[discover]` change the file lists. Details:
-[`docs/rules.md`](docs/rules.md#h1-to-h6-hooks).
+and other settings keys are not checked. `hooks_globs`/`extend_hooks_globs`,
+`mcp_globs`/`extend_mcp_globs` and, for subagent files, `agents_globs`/`extend_agents_globs` in
+`[discover]` change the file lists. Details:
+[`docs/rules.md`](docs/rules.md#h1-to-h8-hooks).
 
 ### Compared with similar tools
 
@@ -123,7 +129,7 @@ documented" means the documentation does not say, not that the feature is missin
 | Runs on | Python 3.11+, nothing to install (standard library plus a vendored copy of PyYAML) | Rust binary (npm, brew, pip, cargo) | Node (`npx`), no runtime dependencies | Node 18+ (`npx`) |
 | Files | `AGENTS.md`, `CLAUDE.md`, `.claude/rules/`, `SKILL.md`, hooks, MCP; others by glob | `CLAUDE.md`, `AGENTS.md`, `SKILL.md`, hooks, MCP, Cursor, Copilot, more | context files of 16 tools, MCP config | `CLAUDE.md`, `AGENTS.md`, `SKILL.md`, Cursor, Copilot, more |
 | Shared config | `extends` presets and files | `extend` base files | not documented | `extends` of the built-in preset |
-| Exceptions | allowlist entries need a reason and an expiry date, expired or unneeded entries fail; path overrides need a reason and raise a level only with `raise = true`; per-line directives need a reason, unused ones warn | disabled rules, per-file overrides, inline comments | ignored rules with an optional reason; unused ones reported | ignored paths |
+| Exceptions | allowlist entries need a reason and an expiry date, expired or unneeded entries fail (warn, for a rule at `warn`); path overrides need a reason and raise a level only with `raise = true`; per-line directives need a reason, unused ones warn | disabled rules, per-file overrides, inline comments | ignored rules with an optional reason; unused ones reported | ignored paths |
 | Vendored copy | reproducible directory with a hash check | not documented | not documented | not documented |
 | References checked | test names, `§N` spec sections; paths with `preset:strict` | import paths, commands, referenced files | paths, commands (against `package.json`, `Makefile`) | file references, imports |
 | Duplicates between files | identical lines in a file and its ancestors | not documented | duplicate content across files | duplicate content; across files not documented |
@@ -218,7 +224,7 @@ max_days = 90
 [[allowlist.entries]]
 rule = "R1a"
 path = "docs/AGENTS.md"
-count = 1  # findings of R1a in that file; more or fewer fail
+count = 1  # findings of R1a in that file; more or fewer fail (warn, for a rule at warn)
 reason = "split planned in the tracker"
 expires = 2026-12-31
 

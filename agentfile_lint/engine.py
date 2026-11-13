@@ -1,4 +1,4 @@
-"""Run the enabled rules over the full set of each file family (instruction, skill, hooks, mcp files)."""
+"""Run the enabled rules over the full set of each file family (instruction, skill, subagent, hooks, mcp files)."""
 from __future__ import annotations
 
 import datetime
@@ -15,10 +15,14 @@ from .rules import FAMILIES, FAMILY, INSTRUCTION, MODULES
 
 # Rules with no module and no `[rules]` level, always on: id -> description (`--list-rules`, SARIF).
 PSEUDO_RULES = {
-    allowlist.RULE_ID: "expired, no-longer-needed or miscounted allowlist entries; warns before expiry and on an override glob that matches no file (always on)",
+    allowlist.RULE_ID: "expired, no-longer-needed or miscounted allowlist entries, at the level of the entry's rule; warns before expiry and on an override glob that matches no file (always on)",
     disable.RULE_ID: "malformed per-line directives; warns on a directive that suppresses nothing (always on)",
     INPUT_RULE: "analyzed file is not valid UTF-8; only an allowlist entry can exempt it (always on)",
 }
+
+
+# Rules whose findings are warnings at any level (a module's `WARN_ONLY` ids).
+WARN_ONLY = frozenset(rule_id for module in MODULES for rule_id in getattr(module, "WARN_ONLY", ()))
 
 
 def _level(rule_level: str, finding: Finding) -> str:
@@ -84,11 +88,12 @@ def run(
             stored[path] = raw  # read once, as stored (docs/design.md, R1a to R1d)
         except UnicodeDecodeError:
             findings.append(Finding(path, 0, INPUT_RULE, "file is not valid UTF-8"))
-    ctx = Context(root, files, {p: stored[p] for p in family_paths[INSTRUCTION] if p in stored})
-    texts = {INSTRUCTION: ctx.files} | {
+    others = {
         family: {p: normalize_newlines(stored[p]) for p in paths if p in stored}
         for family, paths in family_paths.items() if family != INSTRUCTION
     }
+    ctx = Context(root, files, {p: stored[p] for p in family_paths[INSTRUCTION] if p in stored}, others)
+    texts = {INSTRUCTION: ctx.files} | others
     for module in MODULES:
         base = {rule_id: config.rules[rule_id]["level"] for rule_id, _, _ in module.CHECKS}
         # A rule runs at the highest level a `raise` override can give it, so it has findings to raise.
@@ -115,8 +120,19 @@ def run(
     config_key = edit_path(root, source.path) if source else None
     editable = allowlist.Editable(config_key, source.text, source.inherits_entries) if source and source.own_entries else None
     before = findings
+
+    def level_of(rule: str, path: str) -> str:
+        """The highest level a finding of `rule` can have on `path`: what an entry's notes take."""
+        known = config.rules.get(rule)
+        if known is None:
+            return "error"  # E0 has no `[rules]` level: always an error
+        level = overrides.level_for(path, rule, known["level"], config.overrides)
+        return "warn" if level == "error" and rule in WARN_ONLY else level
+
     # A file that is not valid UTF-8 had no rule run on it: n = 0 there says nothing, so no fix.
-    findings = allowlist.apply(findings, config.entries, config.allowlist, set(analyzed), today, editable, set(stored))
+    findings = allowlist.apply(
+        findings, config.entries, config.allowlist, set(analyzed), today, editable, set(stored), level_of=level_of,
+    )
     suppressed += _dropped(before, findings)
     findings += overrides.stale(config.overrides, set(analyzed), root)
     if warn_as_error:

@@ -54,7 +54,7 @@ the `vendor` subcommand writes its copy.
   Two lists concatenate along the `extends` chain instead, parents first: `[[overrides]]`, because
   replacing them would silently drop the overrides of the config a file extends (a child removes an
   inherited glob with an `unset` entry, see Overrides), and the `discover.extend_*` lists
-  (`extend_globs`, `extend_skill_globs`, `extend_hooks_globs`, `extend_mcp_globs`), each of which adds
+  (`extend_globs`, `extend_skill_globs`, `extend_agents_globs`, `extend_hooks_globs`, `extend_mcp_globs`), each of which adds
   to its family's glob list the way ruff's `extend-select` adds to `select` (a child that replaces
   `globs` keeps every inherited `extend_globs`). The shipped presets carry no overrides: a path scope belongs to one
   repository's layout.
@@ -84,13 +84,14 @@ symlink to a file outside the discovered set is analyzed as its own file; a dang
 scan never switches scope on its own.
 ### File families
 
-Each rule module checks one family of files, and each family has its own glob lists:
+Each rule module checks one family of files, and each family has its own glob lists (docs/adr/0009):
 
 | Family | Globs | Default | Rules |
 |---|---|---|---|
-| instruction | `discover.globs`, `discover.extend_globs` | `AGENTS.md`, `CLAUDE.md`, `CLAUDE.local.md` at any depth, `.md` under `.claude/rules/` | R1a to R6, C1 |
-| skill | `discover.skill_globs`, `discover.extend_skill_globs` | `**/SKILL.md` | S1 to S12 |
-| hooks | `discover.hooks_globs`, `discover.extend_hooks_globs` | `**/.claude/settings.json`, `**/.claude/settings.local.json` | H1 to H6 |
+| instruction | `discover.globs`, `discover.extend_globs` | `AGENTS.md`, `CLAUDE.md`, `CLAUDE.local.md` at any depth, `.md` under `.claude/rules/` | R1a to R6, C1, P1 to P5 |
+| skill | `discover.skill_globs`, `discover.extend_skill_globs` | `**/SKILL.md` | S1 to S14 |
+| agents | `discover.agents_globs`, `discover.extend_agents_globs` | `.md` under `.claude/agents/` at any depth | A1 to A5 |
+| hooks | `discover.hooks_globs`, `discover.extend_hooks_globs` | `**/.claude/settings.json`, `**/.claude/settings.local.json` | H1 to H8 |
 | mcp | `discover.mcp_globs`, `discover.extend_mcp_globs` | `.mcp.json` (root only) | M1 to M4 |
 
 Rules of one family never see the files of another: R2 to R6 do not run on `SKILL.md`, and R5a does
@@ -103,7 +104,7 @@ has no comments, so S, H and M ids cannot be named in a directive (an allowlist 
 covers them). An empty glob list turns its family off, except `globs`, which must stay non-empty.
 
 Which S ids run is their level only. The default preset turns on the ids for Claude Code;
-`preset:agentskills` adds the ids for claude.ai upload and the Skills API (docs/rules.md, S1 to S12;
+`preset:agentskills` adds the ids for claude.ai upload and the Skills API (docs/rules.md, S1 to S14;
 docs/adr/0007). An empty `skill_globs` turns the skill family off (`globs` must stay non-empty).
 
 File names given on the command line are not used to narrow the analysis: cross-file rules and the
@@ -259,11 +260,16 @@ Each entry: `rule`, `path`, `count`, `reason`, `expires` (docs/adr/0005).
 - `count` (required, an integer of at least 1) is the number of findings of that rule in that file the
   entry accepts. With n findings of that rule in that file after overrides:
   - n = count: a live entry suppresses all of them.
-  - n > count: none is suppressed, and an error reports that the entry expected `count` and found n.
-  - 0 < n < count: all are suppressed, and an error asks to lower `count` to n.
-  - n = 0 (the file does not violate the rule, or is not an analyzed file): error, no longer needed.
-- Expired (`expires` before today): error, and the findings are not suppressed. An entry that
+  - n > count: none is suppressed, and a note reports that the entry expected `count` and found n.
+  - 0 < n < count: all are suppressed, and a note asks to lower `count` to n.
+  - n = 0 (the file does not violate the rule, or is not an analyzed file): a note, no longer needed.
+- Expired (`expires` before today): a note, and the findings are not suppressed. An entry that
   expires today is still live.
+- The level of those notes is the level of the entry's rule on that path after overrides, so an entry
+  is never stricter than the rule it excepts; `off` gives `warn`, and so does R6, whose findings are
+  warnings at any level. An entry for `E0` is always an error. `--warn-as-error` raises them like any
+  warning. An entry for a rule at `error` still fails when it is no longer needed, also for a path that
+  is not an analyzed file: exceptions to an error are kept current.
 - Within `warn_days` (default 14) of expiry: warning "expires in N days".
 - `max_days` (default 90): an `expires` later than today plus `max_days` fails the configuration.
 - `max_entries` (default 10): more entries fail the configuration.
@@ -284,8 +290,8 @@ the next line of the same file (docs/adr/0006).
 - "Next line" counts lines the way every rule does: only LF, CRLF and a lone CR end a line.
 - It goes in the file that reports the finding: for R5a and R5b, the file with the repeated line, not
   the ancestor or sibling it repeats.
-- Rules whose findings are about the whole file (R1a, R1b, R1c, C1) and rules of other file families
-  (S1 to S12) are not accepted; use an allowlist entry or an override.
+- Rules whose findings are about the whole file (R1a, R1b, R1c, C1) or its frontmatter (P1 to P5)
+  and rules of other file families (S1 to S14, A1 to A5, H1 to H8, M1 to M4) are not accepted; use an allowlist entry or an override.
 - The directive is ordinary text for the other rules: it counts toward R1a, R1b, R1c and R1d.
 - Directives run after overrides and before the allowlist, so a suppressed finding does not count
   toward an entry's `count`.
@@ -299,7 +305,7 @@ weekly schedule so warnings appear before that happens.
 
 ## Fixes
 
-A finding may carry a fix: edits to file text, marked `safe` or `unsafe` as ruff does. The checker
+A finding may carry a fix: edits to file text, marked `safe` or `unsafe` as ruff does (docs/adr/0009). The checker
 writes nothing unless asked: `--fix` applies the safe fixes and then reports the findings that are
 left, `--unsafe-fixes` (only with `--fix` or `--diff`) adds the unsafe ones, and `--diff` prints the
 same edits as a unified diff without writing (split at LF, as `git apply` reads it). Exit codes keep

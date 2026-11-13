@@ -5,6 +5,48 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-14
+
+### Added
+
+- Rule-file rules P1 to P5, at `warn`, for the instruction files inside a `.claude/rules/` directory.
+  A mistake in a rule file's frontmatter is never an error in Claude Code; the rule silently loads in
+  every session or never. P1 (`rule-yaml`): the frontmatter does not parse, even after the second
+  attempt Claude Code makes. P2 (`rule-paths-type`): `paths` holds no pattern (a number, a boolean, a
+  mapping, empty). P3 (`rule-paths-match`): a `paths` pattern matches no tracked file. P4
+  (`rule-paths-key`): no `paths`, but a key that looks like it (`[rules.P4] keys`, default `path`,
+  `glob`, `globs`, and `paths` in another case). P5 (`rule-paths-item`): a `paths` list item is not a
+  string. Per-line directives cannot name them. Patterns are read as Claude Code reads them (docs/rules.md, "P1 to P5
+  rule files"; behaviour measured with Claude Code 2.1.323).
+- Subagent-file rules A1 to A5, at `warn`, on a new file family: `[discover] agents_globs` (default
+  `["**/.claude/agents/**/*.md"]`) and `extend_agents_globs`. A file Claude Code cannot read as a
+  subagent is silently not offered: A1 (`agent-yaml`) the frontmatter does not parse, A2
+  (`agent-frontmatter`) there is none (`[rules.A2] ignore`, default `**/README.md`), A3 (`agent-name`)
+  and A4 (`agent-description`) the field is missing or not a string, A5 (`agent-duplicate-name`) two
+  files of one agents directory share a `name`. On 60 public repositories with subagent files or
+  hooks: 26 files in 5 repositories (docs/rules.md).
+- H7 (`hooks-command-path`) and H8 (`hooks-command-exec`), at `warn`: a hook command names a script
+  under the project directory that does not exist, or runs one directly that has no execute
+  permission; either way the hook silently does not run. `[shared.hooks] project_dir` lists the
+  spellings of the project directory (default `$CLAUDE_PROJECT_DIR` and `${CLAUDE_PROJECT_DIR}`).
+- S14 (`skill-links`), at `warn`: an inline Markdown link in a `SKILL.md` body whose relative target is
+  not a tracked file or directory. On the 22-repository sample it reports 34 links in 3 repositories,
+  all real (docs/rules.md).
+- S13 (`skill-compaction-tokens`), `off` by default and `warn` in `preset:strict`: the body of a
+  `SKILL.md` is estimated at more than `[rules.S13] max_tokens` (5000) tokens, what Claude Code keeps
+  of each invoked skill after compaction. The count is an estimate without a tokenizer.
+
+### Changed (breaking)
+
+- The `allowlist` notes about an entry (more or fewer findings than `count`, no longer needed,
+  expired) now have the level of the entry's rule on that path after overrides instead of always
+  `error`; `off` gives `warning`, and so does R6, whose findings are warnings at any level. Before,
+  an entry for a rule at `warn` failed the run (exit 1) as soon as its count was off, although the
+  rule itself never did. Entries for rules at `error` (R6 aside) and for `E0` are unchanged, and so
+  is what an entry suppresses. A run that
+  relied on such an entry failing now needs `--warn-as-error` or the rule at `error`
+  (docs/adr/0005, Amendment).
+
 ## [0.9.0] - 2026-11-06
 
 ### Added

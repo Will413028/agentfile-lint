@@ -1,4 +1,4 @@
-"""Hooks in Claude Code settings files (H1 to H6; docs/rules.md "H1 to H6 hooks").
+"""Hooks in Claude Code settings files (H1 to H8; docs/rules.md "H1 to H8 hooks").
 
 Each case's consequence was measured with `claude doctor` on Claude Code 2.1.318 (2026-11-06).
 """
@@ -43,6 +43,124 @@ def messages(text: str | bytes, path: str = SETTINGS) -> list[str]:
     return [f["message"] for f in lint({path: text})[1]["findings"]]
 
 
+class CommandPathTest(unittest.TestCase):
+    """H7 and H8: the script a command hook names under the project directory (measured on 2.1.323:
+    a missing script and a script without execute permission run directly do not run, silently)."""
+
+    SCRIPT = ".claude/hooks/check.sh"
+
+    def run_hooks(self, commands: list[str], files: dict[str, str] | None = None, executable: tuple[str, ...] = (),
+                  config: str | None = None, settings: str = SETTINGS):
+        tree = {settings: hooks({"Stop": [{"hooks": [{"type": "command", "command": c} for c in commands]}]}),
+                "AGENTS.md": "ok\n", **(files or {})}
+        if config is not None:
+            tree[".agentfile-lint.toml"] = config
+        root = make_repo(tree)
+        for name in executable:
+            (root / name).chmod(0o755)
+        r = run_new(root, "--format", "json")
+        if r.returncode == 2:
+            raise AssertionError(r.stderr)
+        return [(f["rule"], f["message"]) for f in json.loads(r.stdout)["findings"]], root
+
+    def test_tracked_executable_script_is_fine_in_every_spelling(self):
+        commands = ['"$CLAUDE_PROJECT_DIR"/.claude/hooks/check.sh', "${CLAUDE_PROJECT_DIR}/.claude/hooks/check.sh --fast",
+                    'bash "$CLAUDE_PROJECT_DIR/.claude/hooks/check.sh"', 'FOO=1 exec "$CLAUDE_PROJECT_DIR"/.claude/hooks/check.sh']
+        found, _ = self.run_hooks(commands, {self.SCRIPT: "#!/bin/sh\n"}, executable=(self.SCRIPT,))
+        self.assertEqual(found, [])
+
+    def test_missing_script_is_h7_with_the_json_path(self):
+        found, _ = self.run_hooks(["echo hi", '"$CLAUDE_PROJECT_DIR"/.claude/hooks/gone.sh'])
+        self.assertEqual([rule for rule, _ in found], ["H7"])
+        self.assertIn("hooks.Stop.0.hooks.1.command runs .claude/hooks/gone.sh", found[0][1])
+        found, _ = self.run_hooks(['python3 -u "$CLAUDE_PROJECT_DIR/scripts/gone.py" --x', 'cd /tmp && "$CLAUDE_PROJECT_DIR"/gone.sh'])
+        self.assertEqual([rule for rule, _ in found], ["H7", "H7"])
+
+    def test_quoted_path_with_a_space_is_one_path(self):
+        files = {"my hooks/check.sh": "#!/bin/sh\n"}
+        found, _ = self.run_hooks(['"$CLAUDE_PROJECT_DIR/my hooks/check.sh"', '"$CLAUDE_PROJECT_DIR"/my\\ hooks/check.sh'],
+                                  files, executable=("my hooks/check.sh",))
+        self.assertEqual(found, [])
+        found, _ = self.run_hooks(['"$CLAUDE_PROJECT_DIR/my hooks/gone.sh"'], files)
+        self.assertIn("runs my hooks/gone.sh", found[0][1])
+
+    def test_only_the_script_a_command_runs_is_judged(self):
+        # Arguments, redirection targets, files the command creates, lists and a path it tests first.
+        commands = ['echo x >> "$CLAUDE_PROJECT_DIR"/.claude/hook.log', 'mkdir -p "$CLAUDE_PROJECT_DIR"/tmp',
+                    "PATH=$CLAUDE_PROJECT_DIR/bin:/usr/bin run-check", "lint --files=$CLAUDE_PROJECT_DIR/a.json,b.json",
+                    'jq . "$CLAUDE_PROJECT_DIR"/gone.json', 'bash -c "$CLAUDE_PROJECT_DIR/gone.sh"', 'python3 -m "$CLAUDE_PROJECT_DIR/gone"',
+                    '[ -x "$CLAUDE_PROJECT_DIR"/opt.sh ] && "$CLAUDE_PROJECT_DIR"/opt.sh', "# $CLAUDE_PROJECT_DIR/gone.sh",
+                    'if [ -x "$CLAUDE_PROJECT_DIR/opt.sh" ]; then\n  "$CLAUDE_PROJECT_DIR/opt.sh"\nfi',
+                    'if test -f "$CLAUDE_PROJECT_DIR"/o.py; then\n python3 "$CLAUDE_PROJECT_DIR"/o.py\nfi',
+                    '! [ -x "$CLAUDE_PROJECT_DIR"/o.sh ] || "$CLAUDE_PROJECT_DIR"/o.sh',
+                    'bash -lc "$CLAUDE_PROJECT_DIR/gone.sh arg"', 'python3 -uc "$CLAUDE_PROJECT_DIR/gone.py"', 'node -pe "$CLAUDE_PROJECT_DIR/gone.js"',
+                    'pwsh -NoProfile -command "$CLAUDE_PROJECT_DIR/gone.ps1 x"', 'python3 - "$CLAUDE_PROJECT_DIR"/data < s.py',
+                    "$CLAUDE_PROJECT_DIR/bin/run-`uname`.sh", 'bash "$CLAUDE_PROJECT_DIR/hooks/`uname`.sh"',
+                    'cat <<EOF\n$CLAUDE_PROJECT_DIR/gone.sh\nEOF', 'node "$CLAUDE_PROJECT_DIR/.claude\\hooks\\x.js"',
+                    '>"$CLAUDE_PROJECT_DIR"/out.log cat', 'true # ; "$CLAUDE_PROJECT_DIR"/gone.sh']
+        self.assertEqual(self.run_hooks(commands)[0], [])
+        # The same forms still find a script that is run.
+        found, _ = self.run_hooks(['if true; then "$CLAUDE_PROJECT_DIR"/gone.sh; fi', 'bash -x "$CLAUDE_PROJECT_DIR"/gone2.sh',
+                                   'cat <<<"x"; "$CLAUDE_PROJECT_DIR"/gone3.sh'])
+        self.assertEqual([rule for rule, _ in found], ["H7"] * 3)
+
+    def test_spelling_the_shell_does_not_expand_is_not_the_project_directory(self):
+        commands = ["'$CLAUDE_PROJECT_DIR/gone.sh'", '\\$CLAUDE_PROJECT_DIR/gone.sh']
+        self.assertEqual(self.run_hooks(commands)[0], [])
+
+    def test_script_run_directly_without_execute_permission_is_h8(self):
+        files = {self.SCRIPT: "#!/bin/sh\n"}
+        found, _ = self.run_hooks(['"$CLAUDE_PROJECT_DIR"/.claude/hooks/check.sh'], files)
+        self.assertEqual([rule for rule, _ in found], ["H8"])
+        # Through an interpreter, or as an argument, the permission does not matter.
+        found, _ = self.run_hooks(['bash "$CLAUDE_PROJECT_DIR"/.claude/hooks/check.sh',
+                                   'jq . "$CLAUDE_PROJECT_DIR"/.claude/hooks/check.sh'], files)
+        self.assertEqual(found, [])
+        # Directly in any command position.
+        found, _ = self.run_hooks(['FOO=1 "$CLAUDE_PROJECT_DIR"/.claude/hooks/check.sh',
+                                   'cd /tmp && "$CLAUDE_PROJECT_DIR"/.claude/hooks/check.sh; true'], files)
+        self.assertEqual([rule for rule, _ in found], ["H8", "H8"])
+
+    def test_untracked_file_on_disk_and_directories_count_as_there(self):
+        found, root = self.run_hooks(['"$CLAUDE_PROJECT_DIR"/.claude/hooks/local.sh', 'ls "$CLAUDE_PROJECT_DIR"/.claude/hooks'],
+                                     {self.SCRIPT: "#!/bin/sh\n"})
+        self.assertEqual([rule for rule, _ in found], ["H7"])
+        (root / ".claude/hooks/local.sh").write_text("#!/bin/sh\n")
+        (root / ".claude/hooks/local.sh").chmod(0o755)
+        self.assertEqual(json.loads(run_new(root, "--format", "json").stdout)["findings"], [])
+
+    def test_paths_this_tool_cannot_resolve_are_not_judged(self):
+        commands = ['"$CLAUDE_PROJECT_DIR"/scripts/$NAME.sh', '"$CLAUDE_PROJECT_DIR"/scripts/*.sh', "$HOME/bin/gone.sh",
+                    "./scripts/gone.sh", "scripts/gone.sh", '"$CLAUDE_PROJECT_DIR"/../outside/gone.sh', "$OTHER_DIR/scripts/gone.sh"]
+        self.assertEqual(self.run_hooks(commands)[0], [])
+
+    def test_project_directory_spellings_are_configuration(self):
+        config = '[shared.hooks]\nproject_dir = ["${APP_ROOT:-$HOME/app}"]\n'
+        found, _ = self.run_hooks(['"${APP_ROOT:-$HOME/app}/scripts/gone.sh"', '"$CLAUDE_PROJECT_DIR"/scripts/gone.sh'], config=config)
+        self.assertEqual([(rule, "scripts/gone.sh" in m) for rule, m in found], [("H7", True)])
+        self.assertEqual(self.run_hooks(['"$CLAUDE_PROJECT_DIR"/x/gone.sh'], config='[shared.hooks]\nproject_dir = []\n')[0], [])
+        with self.assertRaisesRegex(AssertionError, "shared.hooks.project_dir"):
+            self.run_hooks(["/usr/bin/env x"], config='[shared.hooks]\nproject_dir = [""]\n')
+
+    def test_hook_in_a_group_claude_code_ignores_is_not_judged(self):
+        text = json.dumps({"hooks": {"Stop": [{"matcher": 5, "hooks": [{"type": "command", "command": '"$CLAUDE_PROJECT_DIR"/gone.sh'}]}]}})
+        self.assertEqual(rules_of(text), ["H3"])
+
+    def test_nested_settings_resolve_from_their_own_project_directory(self):
+        found, _ = self.run_hooks(['"$CLAUDE_PROJECT_DIR"/tools/run.sh'], {"pkg/tools/run.sh": "x\n", "tools/other.sh": "x\n"},
+                                  executable=("pkg/tools/run.sh",), settings="pkg/.claude/settings.json")
+        self.assertEqual(found, [])
+        found, _ = self.run_hooks(['"$CLAUDE_PROJECT_DIR"/tools/other.sh'], {"tools/other.sh": "x\n"}, settings="pkg/.claude/settings.json")
+        self.assertIn("looked for pkg/tools/other.sh", found[0][1])
+
+    def test_levels_are_separate_and_bad_settings_are_left_to_h1(self):
+        files = {self.SCRIPT: "#!/bin/sh\n"}
+        commands = ['"$CLAUDE_PROJECT_DIR"/.claude/hooks/check.sh', '"$CLAUDE_PROJECT_DIR"/.claude/hooks/gone.sh']
+        self.assertEqual([r for r, _ in self.run_hooks(commands, files, config='[rules.H7]\nlevel = "off"\n')[0]], ["H8"])
+        self.assertEqual([r for r, _ in self.run_hooks(commands, files, config='[rules.hooks-command-exec]\nlevel = "off"\n')[0]], ["H7"])
+        self.assertEqual(rules_of("{not json"), ["H1"])
+
+
 class ValidSettingsTest(unittest.TestCase):
     def test_documented_examples_report_nothing(self):
         # hooks reference, "How a hook resolves" and the five handler types.
@@ -56,7 +174,8 @@ class ValidSettingsTest(unittest.TestCase):
             ]}],
             "Stop": [{"hooks": [{"type": "prompt", "prompt": "Check $ARGUMENTS"}, {"type": "agent", "prompt": "Verify"}]}],
         })
-        self.assertEqual(rules_of(text), [])
+        # The example's script is not in this repository: H7, checked in CommandPathTest.
+        self.assertEqual(rules_of(text), ["H7"])
 
     def test_settings_without_hooks_and_a_leading_bom_report_nothing(self):
         self.assertEqual(rules_of('{"permissions": {"allow": []}}'), [])

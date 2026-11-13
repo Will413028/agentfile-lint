@@ -1,4 +1,4 @@
-"""H1 to H6: hooks in Claude Code settings files (docs/rules.md "H1 to H6 hooks").
+"""H1 to H8: hooks in Claude Code settings files (docs/rules.md "H1 to H8 hooks").
 
 Only what the hooks reference states: the file is JSON, `hooks` maps documented event names to
 matcher groups, each handler has a known `type` and that type's required fields, and a command hook
@@ -10,12 +10,25 @@ matcher group under PreToolUse or PermissionRequest that cannot be loaded keeps 
 applying the settings around it, since it may guard the permissions declared beside it; elsewhere
 Claude Code ignores just that entry. Positions are JSON paths in the form `claude doctor` prints
 (`hooks.Stop.0.hooks.1`); the line is the file (0) except for a JSON syntax error.
+
+H7 and H8 look at the script a command hook runs inside the project: the program of one of its
+simple commands, or the script handed to an interpreter (`bash`, `python3`, `node`; measured on Claude Code
+2.1.323): a script that is not there, or one that is run directly without execute permission, does
+not run. Claude Code treats that as a non-blocking error, so the action the hook was meant to check
+goes ahead. A script counts when its word is one of `[shared.hooks] project_dir` (spellings of the
+project directory, `$CLAUDE_PROJECT_DIR` by default) where the shell expands it, then a path without
+an expansion of its own. Other paths in a command (arguments, redirection targets, files it creates)
+are not judged.
 """
 from __future__ import annotations
 
-from typing import Any
+import os
+import posixpath
+import re
+from typing import Any, Iterator
 
-from ..errors import levels_only
+from ..context import Context
+from ..errors import check_keys, expect_str_list, levels_only, require_keys
 from ..finding import Finding
 from ._json import blank, kind, load
 
@@ -28,7 +41,10 @@ CHECKS = (
     ("H4", "hooks-type", "every hook handler has a documented type"),
     ("H5", "hooks-required", "every hook handler has its type's required fields as strings"),
     ("H6", "hooks-empty-command", "a command hook's command is not empty"),
+    ("H7", "hooks-command-path", "a script a hook command runs from the project directory exists"),
+    ("H8", "hooks-command-exec", "a script a hook command runs directly has execute permission"),
 )
+SHARED = ("hooks", {"project_dir"})
 WHOLE_FILE = tuple(rule_id for rule_id, _, _ in CHECKS)   # JSON has no comments; no directive applies
 
 # Hooks reference, "Hook lifecycle" table and "Hook events" sections (2026-11-06); `claude doctor`
@@ -51,8 +67,168 @@ REQUIRED = {
 GUARDING = frozenset({"PreToolUse", "PermissionRequest"})
 
 
-def validate(shared: None, tables: dict[str, dict[str, Any]]) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
-    return {}, levels_only(tables)
+def validate(shared: dict[str, Any], tables: dict[str, dict[str, Any]]) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    check_keys(shared, {"project_dir"}, "shared.hooks")
+    require_keys(shared, ["project_dir"], "shared.hooks")
+    spellings = expect_str_list(shared["project_dir"], "shared.hooks.project_dir", allow_empty=True)
+    return {"project_dir": spellings}, levels_only(tables)
+
+
+def _commands(data: Any) -> Iterator[tuple[str, str]]:
+    """(JSON path, command) of every command hook that H1 to H6 accept as one."""
+    hooks = data.get("hooks") if isinstance(data, dict) else None
+    for event, groups in hooks.items() if isinstance(hooks, dict) else ():
+        for i, group in enumerate(groups if event in EVENTS and isinstance(groups, list) else ()):
+            if not isinstance(group, dict) or not isinstance(group.get("matcher", ""), str):
+                continue
+            handlers = group.get("hooks")
+            for j, handler in enumerate(handlers if isinstance(handlers, list) else ()):
+                if isinstance(handler, dict) and handler.get("type") == "command" and isinstance(handler.get("command"), str):
+                    yield f"hooks.{event}.{i}.hooks.{j}", handler["command"]
+
+
+# Programs that run the script given as their first argument, and words that only wrap a command.
+_INTERPRETERS = frozenset("bash sh zsh dash ksh python python3 node bun deno ruby perl pwsh source .".split())
+_WRAPPERS = frozenset("exec command nohup time env if then elif else while until do ! {".split())
+_TESTS = frozenset(("[", "[[", "test"))
+# With one of these before it, an interpreter's argument is code or a module, not a script: a short
+# flag cluster holding c, e, m or p (`-c`, `-lc`, `-pe`), `--eval`, `--print`, `-Command`, or a bare `-`.
+_INLINE = re.compile(r"-[A-Za-z]*[cemp][A-Za-z]*\Z|--eval\Z|--print\Z|-(?i:command)\Z|-\Z")
+_ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")
+
+
+def simple_commands(command: str) -> list[list[tuple[str, str]]]:
+    """The simple commands of a shell command line, each a list of words without its redirection
+    targets. A word is (text with the quotes removed, a mark per character: `s` inside single
+    quotes or after a backslash, where the shell expands nothing, else `u`)."""
+    out: list[list[tuple[str, str]]] = [[]]
+    text: list[str] = []
+    marks: list[str] = []
+    quote = ""
+    started = redirect = False
+
+    def end_word() -> None:
+        nonlocal started, redirect
+        if started and not redirect:
+            out[-1].append(("".join(text), "".join(marks)))
+        if started:
+            redirect = False
+        text.clear()
+        marks.clear()
+        started = False
+
+    i = 0
+    while i < len(command):
+        c = command[i]
+        if quote:
+            if c == quote:
+                quote = ""
+            elif c == "\\" and quote == '"' and command[i + 1:i + 2] in ('"', "\\", "$", "`"):
+                i += 1
+                text.append(command[i])
+                marks.append("s")
+            else:
+                text.append(c)
+                marks.append("s" if quote == "'" else "u")
+        elif c in "'\"":
+            quote, started = c, True
+        elif c == "\\" and i + 1 < len(command):
+            i += 1
+            started = True
+            text.append(command[i])
+            marks.append("s")
+        elif c in " \t":
+            end_word()
+        elif c in ";&|()\n":
+            end_word()
+            out.append([])
+        elif c in "<>":
+            end_word()
+            if command.startswith("<<", i) and not command.startswith("<<<", i):
+                break   # a here-document: what follows is its text, not commands
+            redirect = True
+            while command[i + 1:i + 2] in (">", "<", "&", "|"):
+                i += 1
+        elif c == "#" and not started:
+            break
+        else:
+            started = True
+            text.append(c)
+            marks.append("u")
+        i += 1
+    end_word()
+    return [words for words in out if words]
+
+
+def _project_path(word: tuple[str, str], spellings: list[str]) -> str | None:
+    """The path a word names under the project directory: the word is a spelling the shell expands,
+    then `/`, then a path without an expansion of its own."""
+    text, marks = word
+    for spelling in sorted(spellings, key=len, reverse=True):
+        if text.startswith(spelling + "/") and "s" not in marks[:len(spelling)]:
+            rest, rest_marks = text[len(spelling) + 1:], marks[len(spelling) + 1:]
+            # A backslash that is still there sat inside double quotes: a Windows-style path, not ours.
+            if not rest or "\\" in rest or any(c in "$*?{}[]~`" and m == "u" for c, m in zip(rest, rest_marks)):
+                return None
+            return posixpath.normpath(rest)
+    return None
+
+
+def project_scripts(command: str, spellings: list[str]) -> list[tuple[str, bool]]:
+    """(path under the project directory, whether it is run directly) of each script the command
+    runs: the program of a simple command, or the script an interpreter is given. A path the same
+    command tests first (`[ -x path ] && path`) is optional by design and left out."""
+    found: list[tuple[str, bool]] = []
+    tested: set[str] = set()
+    for words in simple_commands(command):
+        while words and (_ASSIGNMENT.match(words[0][0]) and words[0][1][0] == "u" or words[0][0] in _WRAPPERS):
+            words = words[1:]
+        if not words:
+            continue
+        program = words[0][0]
+        if program in _TESTS:
+            tested.update(p for p in (_project_path(w, spellings) for w in words[1:]) if p)
+            continue
+        path = _project_path(words[0], spellings)
+        if path:
+            found.append((path, True))
+        elif posixpath.basename(program) in _INTERPRETERS:
+            for word in words[1:]:
+                if _INLINE.match(word[0]):
+                    break
+                if not word[0].startswith("-"):
+                    path = _project_path(word, spellings)
+                    if path:
+                        found.append((path, False))
+                    break
+    return [entry for entry in dict.fromkeys(found) if entry[0] not in tested]
+
+
+def check_repo(ctx: Context, params: dict[str, Any], levels: dict[str, str]) -> list[Finding]:
+    found: list[Finding] = []
+    if levels["H7"] == "off" and levels["H8"] == "off":
+        return found
+    for path, text in ctx.family_files.get(FAMILY, {}).items():
+        data, problem = (None, None) if blank(text) else load(text)
+        if problem is not None:
+            continue
+        # The project directory: the one that holds the `.claude` folder of the settings file.
+        folder = posixpath.dirname(path)
+        base = posixpath.dirname(folder) if posixpath.basename(folder) == ".claude" else folder
+        for where, command in _commands(data):
+            for relative, direct in project_scripts(command, params["project_dir"]):
+                target = posixpath.normpath(posixpath.join(base, relative))
+                if target == ".." or target.startswith("../"):
+                    continue
+                on_disk = ctx.root / target
+                if target not in ctx.tracked_set and target not in ctx.dirs and not on_disk.exists():
+                    found.append(Finding(path, 0, "H7", f"{where}.command runs {relative}, which is not a tracked "
+                                         f"file (looked for {target}); the hook cannot start, which is a non-blocking error: the action goes ahead without it"))
+                elif direct and os.name != "nt" and on_disk.is_file() and not os.access(on_disk, os.X_OK):
+                    found.append(Finding(path, 0, "H8", f"{where}.command runs {relative} directly, and the file has no "
+                                         "execute permission; the hook cannot start, which is a non-blocking error: the action goes "
+                                         "ahead without it (chmod +x the file, or run it through its interpreter)"))
+    return found
 
 
 def check(path: str, text: str, params: dict[str, Any], levels: dict[str, str]) -> list[Finding]:
