@@ -60,7 +60,7 @@ class YamlTest(unittest.TestCase):
         found, messages, _ = lint(rule('description: d\npaths: [unclosed\n  - "src/**/*.ts"\n'))
         self.assertEqual([(f[0], f[2]) for f in found], [(RULE, "P1")])
         self.assertGreater(found[0][1], 1)
-        self.assertIn("loads the rule in every session", messages[0])
+        self.assertIn("loads the rule without a path scope", messages[0])
 
     def test_values_claude_code_quotes_on_its_second_parse_are_not_errors(self):
         # Invalid YAML as written (`*` starts an alias, `{` a flow mapping), read by Claude Code all the same.
@@ -94,7 +94,7 @@ class PathsTypeTest(unittest.TestCase):
             with self.subTest(frontmatter=frontmatter):
                 found, messages, _ = lint(rule("description: d\n" + frontmatter))
                 self.assertEqual(found, [(RULE, 3, "P2")])
-                self.assertIn("loads the rule in every session", messages[0])
+                self.assertIn("loads the rule without a path scope", messages[0])
 
     def test_quoted_number_and_yaml_1_1_booleans_are_patterns(self):
         # Claude Code reads YAML 1.2: `yes` is the pattern "yes" (P3: it matches nothing), not a boolean.
@@ -210,6 +210,7 @@ class PathsKeyTest(unittest.TestCase):
                 found, messages, _ = lint(rule(f'description: d\n{key}:\n  - "src/**/*.ts"\n'))
                 self.assertEqual(found, [(RULE, 3, "P4")])
                 self.assertIn(repr(key), messages[0])
+                self.assertIn("loads the rule without a path scope", messages[0])
 
     def test_lookalike_key_beside_paths_and_other_keys_are_fine(self):
         self.assertEqual(ids('globs: "src/**"\npaths: "src/**"\n'), [])

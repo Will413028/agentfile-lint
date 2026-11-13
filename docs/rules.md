@@ -458,9 +458,22 @@ Readings:
 - Not checked: rule files in `~/.claude/rules/` (outside the repository), and whether a symlink's
   target is outside the working directory (Claude Code asks for approval before loading those).
 
-Measured: objective except P4's intent. On three private repositories that use rule files (37 rule and
-skill files, 36 `paths` patterns): no P finding and no S13 finding; every pattern matches a tracked
-file. No public sample yet.
+The measurements above are of rule files in the root `.claude/rules/`. A rule file in a
+subdirectory's `.claude/rules/` loads on demand, not at launch (documented, not measured here: "rules
+that load on demand, including path-scoped rules and rules in nested `.claude/rules/` directories"),
+so for those files "loads in every session" in the table reads "loads without its path scope", which
+is what the finding says.
+
+Measured: objective except P4's intent. On the 22-repository sample of docs/field-report.md
+(2026-11-13) only 2 repositories have rule files, 7 in all: P4 reports 5 of them, all in one
+repository and all real (a `globs` list of patterns under a `description`, the form another tool
+reads; Claude Code applies none of the patterns), and P1, P2, P3 and P5 report nothing. On three
+private repositories that use rule files (20 rule files, 36 `paths` patterns): no P finding; every
+pattern matches a tracked file.
+
+S13 on the same sample with `preset:strict`: 136 of the 1695 `SKILL.md` files in 8 repositories are
+estimated over 5,000 tokens (from 5,015 to 17,997, median 6,068); 92 of them are in one repository.
+The estimate was not compared with a tokenizer.
 
 ## H1 to H6 hooks
 

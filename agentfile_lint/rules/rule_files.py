@@ -12,6 +12,9 @@ one written (measured with Claude Code 2.1.323, docs/rules.md "P1 to P5 rule fil
   ignores, so the rule loads in every session.
 - P5: one item of the `paths` list is not a string and is ignored; the other patterns work.
 
+"Every session" is for a rule in the root `.claude/rules/`; one in a subdirectory's loads on demand,
+and what it loses is its path scope.
+
 Runs on instruction files inside a `.claude/rules/` directory. The frontmatter is read as Claude Code
 reads it: when the YAML does not parse, the values of `key: value` lines that hold a YAML special
 character are quoted and the block is parsed again, so `paths: **/*.ts` is a pattern, not an error.
@@ -40,7 +43,9 @@ CHECKS = (
 # Findings sit on frontmatter lines, where an HTML comment cannot be written: no per-line directive.
 WHOLE_FILE = ("P1", "P2", "P3", "P4", "P5")
 
-EVERY_SESSION = "Claude Code loads the rule in every session"
+# A root rule without a scope loads at launch; one in a subdirectory's `.claude/rules/` loads with that
+# directory's rules. Either way the scope written in the file is not applied.
+EVERY_SESSION = "Claude Code loads the rule without a path scope (a root rule: in every session)"
 MAX_EXPANSIONS = 1000   # Claude Code's budget of expanded patterns for one `paths` list
 # A plain scalar that YAML 1.2's core schema, which Claude Code's reader follows, does not read as a string.
 _CORE_NOT_STRING = re.compile(
@@ -119,8 +124,8 @@ def check_repo(ctx: Context, params: dict[str, Any], levels: dict[str, str]) -> 
         if fm is None:
             continue
         if fm.error is not None:
-            found.append(Finding(path, fm.line, "P1", f"{fm.error}; Claude Code ignores the frontmatter, so "
-                                 f"{EVERY_SESSION} whatever `paths` says"))
+            found.append(Finding(path, fm.line, "P1", f"{fm.error}; Claude Code ignores the frontmatter: "
+                                 f"{EVERY_SESSION}, whatever `paths` says"))
             continue
         data = fm.value
         if not isinstance(data, dict):
@@ -128,8 +133,8 @@ def check_repo(ctx: Context, params: dict[str, Any], levels: dict[str, str]) -> 
         if "paths" not in data:
             alike = [k for k in data if k in params["keys"] or k.lower() == "paths"]
             if alike:
-                found.append(Finding(path, fm.keys.get(alike[0], 1), "P4", f"key {alike[0]!r} is not `paths`; Claude "
-                                     f"Code ignores it, so {EVERY_SESSION}"))
+                found.append(Finding(path, fm.keys.get(alike[0], 1), "P4", f"key {alike[0]!r} is not `paths` and is ignored; "
+                                     f"{EVERY_SESSION}"))
             continue
         line = fm.keys.get("paths", 1)
         patterns, no_pattern, ignored = _patterns(data["paths"], fm.plain.get("paths", False))
