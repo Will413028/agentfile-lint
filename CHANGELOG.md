@@ -5,6 +5,8 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-14
+
 ### Added
 
 - A6 (`agent-tools`), at `warn`: an entry of a subagent file's `tools` names a tool Claude Code does
