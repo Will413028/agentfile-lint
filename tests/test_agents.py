@@ -1,4 +1,4 @@
-"""Subagent files (A1 to A6; docs/rules.md "A1 to A6 subagent files"), measured on Claude Code 2.1.323 (A6: 2.1.325)."""
+"""Subagent files (A1 to A7; docs/rules.md "A1 to A7 subagent files"), measured on Claude Code 2.1.323 (A6: 2.1.325)."""
 import json
 import unittest
 
@@ -139,7 +139,7 @@ class ToolsTest(unittest.TestCase):
                       "tools:\n", "tools: null\n", "tools: ~\n", "tools: true\n", "tools: 5\n", "tools: Read Bash\n",
                       'tools:\n  - "Read, Bash"\n', "tools: (x), Read\n", "tools: [Read, [Bash]]\n", "model: sonnet\n",
                       "tools: [Agent(worker, LS, tester), Read]\n", "tools: Bash(git log, LS, x), Read\n",
-                      "tools:\n  - Read\n  - null\n  - true\n", "disallowedTools: LS, bash\n", "tools: ['Read', \"Bash\"]\n"):
+                      "tools:\n  - Read\n  - null\n  - true\n", "tools: ['Read', \"Bash\"]\n"):
             with self.subTest(tools=tools):
                 self.assertEqual(self.found(tools)[0], [])
 
@@ -175,18 +175,45 @@ class ToolsTest(unittest.TestCase):
         self.assertEqual(ids(agent(head + "tools: [Read, LS]\n")), ["A6"])
 
     def test_the_known_names_are_configuration(self):
-        self.assertEqual(self.found("tools: Read, MyTool\n", '[rules.A6]\ntools = ["Read", "MyTool"]\n')[0], [])
-        self.assertEqual(self.found("tools: Read, MyTool, Bash\n", '[rules.A6]\nextend_tools = ["MyTool"]\n')[0], [])
-        self.assertIn("`Mytool`,", self.found("tools: Read Mytool\n", '[rules.A6]\nextend_tools = ["MyTool"]\n')[1][0])
-        self.assertEqual(self.found("tools: Read, Bash\n", '[rules.A6]\ntools = ["Read"]\n')[0], [(4, "A6")])
+        self.assertEqual(self.found("tools: Read, MyTool\n", '[shared.agents]\ntools = ["Read", "MyTool"]\n')[0], [])
+        self.assertEqual(self.found("tools: Read, MyTool, Bash\n", '[shared.agents]\nextend_tools = ["MyTool"]\n')[0], [])
+        self.assertIn("`Mytool`,", self.found("tools: Read Mytool\n", '[shared.agents]\nextend_tools = ["MyTool"]\n')[1][0])
+        self.assertEqual(self.found("tools: Read, Bash\n", '[shared.agents]\ntools = ["Read"]\n')[0], [(4, "A6")])
         self.assertEqual(self.found("tools: LS\n", '[rules.A6]\nlevel = "off"\n')[0], [])
 
     def test_a_wrong_tools_setting_is_a_config_error(self):
         files = dict(agent(self.HEAD))
-        files[".agentfile-lint.toml"] = '[rules.A6]\ntools = "Read"\n'
+        files[".agentfile-lint.toml"] = '[shared.agents]\ntools = "Read"\n'
         r = run_new(make_repo(files), "--format", "json")
         self.assertEqual(r.returncode, 2)
-        self.assertIn("rules.A6.tools", r.stderr)
+        self.assertIn("shared.agents.tools", r.stderr)
+
+
+class DisallowedToolsTest(unittest.TestCase):
+    """A7: an unknown name in `disallowedTools` denies nothing (measured on 2.1.325:
+    `disallowedTools: bash, write` leaves Bash and Write; `Bash, Write` removes them)."""
+
+    HEAD = "name: reviewer\ndescription: Use to review.\n"
+
+    def test_names_claude_code_knows_report_nothing(self):
+        for field in ("disallowedTools: Bash, Write\n", "disallowedTools: Bash(git push *), mcp__github__*\n",
+                      "disallowedTools:\n  - Edit\n  - Agent\n", "disallowedTools:\n", "disallowedTools: null\n"):
+            with self.subTest(field=field):
+                self.assertEqual(ids(agent(self.HEAD + field)), [])
+
+    def test_unknown_names_are_one_finding_on_the_line(self):
+        where, messages, _ = lint(agent(self.HEAD + "tools: Read, Bash\ndisallowedTools: bash, Write, write\n"))
+        self.assertEqual([(line, rule) for _, line, rule in where], [(5, "A7")])
+        self.assertIn("`disallowedTools` names `bash`, `write`, which", messages[0])
+        self.assertIn("denies nothing", messages[0])
+
+    def test_it_is_apart_from_a6_and_uses_its_names(self):
+        both = agent(self.HEAD + "tools: read\ndisallowedTools: bash\n")
+        self.assertEqual(ids(both), ["A6", "A7"])
+        self.assertEqual(ids(both, '[rules.A6]\nlevel = "off"\n'), ["A7"])
+        self.assertEqual(ids(both, '[rules.A7]\nlevel = "off"\n'), ["A6"])
+        self.assertEqual(ids(agent(self.HEAD + "disallowedTools: MyTool\n"), '[shared.agents]\nextend_tools = ["MyTool"]\n'), [])
+        self.assertEqual(ids(agent("name: reviewer\ndisallowedTools: bash\n")), ["A4"])     # not loaded: no A7
 
 
 if __name__ == "__main__":

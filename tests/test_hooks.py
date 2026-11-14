@@ -1,4 +1,4 @@
-"""Hooks in Claude Code settings files (H1 to H8; docs/rules.md "H1 to H8 hooks").
+"""Hooks in Claude Code settings files (H1 to H9; docs/rules.md "H1 to H9 hooks").
 
 Each case's consequence was measured with `claude doctor` on Claude Code 2.1.318 (2026-11-06).
 """
@@ -436,6 +436,57 @@ class FamilyTest(unittest.TestCase):
         self.assertEqual(doc["discover"]["hooks_globs"], ["**/.claude/settings.json", "**/.claude/settings.local.json"])
         self.assertEqual(doc["discover"]["extend_hooks_globs"], [])
         self.assertEqual([doc["rules"][f"H{i}"] for i in range(1, 7)], [{"level": "warn"}] * 6)
+
+
+class MisplacedKeyTest(unittest.TestCase):
+    """H9: a top-level key that works somewhere else and does nothing here (measured on 2.1.325:
+    `defaultMode`, `deny`, `disallowedTools` and `mcpServers` at the top level change nothing)."""
+
+    def test_keys_in_their_place_and_other_keys_report_nothing(self):
+        text = json.dumps({"permissions": {"defaultMode": "plan", "allow": ["Read"], "deny": ["Bash"], "ask": []},
+                           "env": {}, "model": "opus", "enabledPlugins": {}, "_comment": "x", "unknownKey": 1})
+        self.assertEqual(rules_of(text), [])
+
+    def test_each_misplaced_key_is_one_finding_that_names_its_place(self):
+        text = json.dumps({"defaultMode": "plan", "mcpServers": {}, "disallowedTools": ["Read"], "deny": [], "env": {},
+                           "allow": [], "ask": [], "allowedTools": []})      # the last three: not measured, not shipped
+        found, doc = lint({SETTINGS: text})
+        self.assertEqual(found, [(SETTINGS, None, "H9")] * 4)
+        local = ".claude/settings.local.json"
+        self.assertEqual(lint({"sub/" + local: text}, None, "--no-git")[0], [("sub/" + local, None, "H9")] * 4)
+        got = [f["message"] for f in doc["findings"]]
+        self.assertIn("top-level key `defaultMode` is not a setting", got[0])
+        self.assertIn("it belongs in `permissions.defaultMode`", got[0])
+        self.assertTrue(any("`mcpServers`" in m and "`.mcp.json`" in m for m in got))
+        self.assertTrue(any("`disallowedTools`" in m and "`permissions.deny`" in m for m in got))
+
+    def test_only_a_settings_file_is_read(self):
+        # A file a repository adds to the family for its hooks has its own top level.
+        text = json.dumps({"mcpServers": {}, "hooks": {"Nope": []}})
+        config = '[discover]\nextend_hooks_globs = ["plugin/hooks.json"]\n'
+        self.assertEqual([rule for _, _, rule in lint({"plugin/hooks.json": text}, config)[0]], ["H2"])
+
+    def test_it_is_reported_beside_the_hook_findings(self):
+        self.assertEqual(rules_of(json.dumps({"defaultMode": "plan", "hooks": 5})), ["H3", "H9"])
+        self.assertEqual(rules_of(json.dumps({"defaultMode": "plan", "hooks": {"Nope": []}})), ["H2", "H9"])
+        self.assertEqual(rules_of(json.dumps({"defaultMode": "plan", "hooks": {}})), ["H9"])
+        self.assertEqual(rules_of("[]"), ["H1"])
+
+    def test_the_keys_are_configuration(self):
+        text = json.dumps({"defaultMode": "plan", "teamKey": 1})
+        found, doc = lint({SETTINGS: text}, '[rules.H9.keys]\nteamKey = "the team file"\n')
+        self.assertEqual([rule for _, _, rule in found], ["H9", "H9"])       # a repository's keys add to the shipped ones
+        self.assertTrue(any(f["message"].endswith("it belongs in the team file") for f in doc["findings"]))
+        self.assertEqual(lint({SETTINGS: text}, '[rules.H9]\nlevel = "off"\n')[0], [])
+        self.assertEqual(lint({SETTINGS: text}, '[rules.H9]\nignore = ["defaultMode"]\n')[0], [])
+        for config, word in (('[rules.H9]\nkeys = ["defaultMode"]\n', "rules.H9.keys"), ('[rules.H9.keys]\nx = 1\n', "rules.H9.keys.x"),
+                             ('[rules.H9]\nkey = 1\n', "rules.H9"), ('[rules.H9]\nignore = "defaultMode"\n', "rules.H9.ignore"),
+                             ('[rules.H9]\nignore = ["Deny"]\n', "rules.H9.ignore names Deny")):
+            with self.subTest(config=config):
+                files = {SETTINGS: text, "AGENTS.md": "ok\n", ".agentfile-lint.toml": config}
+                r = run_new(make_repo(files), "--format", "json")
+                self.assertEqual(r.returncode, 2)
+                self.assertIn(word, r.stderr)
 
 
 if __name__ == "__main__":

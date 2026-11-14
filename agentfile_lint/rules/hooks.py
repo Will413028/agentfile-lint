@@ -1,11 +1,15 @@
-"""H1 to H8: hooks in Claude Code settings files (docs/rules.md "H1 to H8 hooks").
+"""H1 to H9: hooks in Claude Code settings files (docs/rules.md "H1 to H9 hooks").
 
 Only what the hooks reference states: the file is JSON, `hooks` maps documented event names to
 matcher groups, each handler has a known `type` and that type's required fields, and a command hook
 names a command. Optional fields and other settings keys are not checked: the key set changes with
-Claude Code releases, and a full schema is out of scope (docs/rules.md, Not checked).
+Claude Code releases, and a full schema is out of scope (docs/rules.md, Not checked). H9 is the one
+exception, and a narrow one: a top-level key from the table `[rules.H9] keys`, each a key that works
+in another place and does nothing at the top level of a settings file (measured on 2.1.325).
 
-Each consequence in a message was measured with `claude doctor` on Claude Code 2.1.318. A handler or
+Each consequence in a message of H1 to H6 was measured with `claude doctor` on Claude Code 2.1.318;
+H7 to H9 were measured by running headless sessions (2.1.323 and 2.1.325), and `claude doctor` says
+nothing about them. A handler or
 matcher group under PreToolUse or PermissionRequest that cannot be loaded keeps Claude Code from
 applying the settings around it, since it may guard the permissions declared beside it; elsewhere
 Claude Code ignores just that entry. Positions are JSON paths in the form `claude doctor` prints
@@ -30,7 +34,7 @@ import re
 from typing import Any, Iterator
 
 from ..context import Context
-from ..errors import check_keys, expect_str_list, levels_only, require_keys
+from ..errors import ConfigError, check_keys, expect_str, expect_str_list, levels_only, require_keys
 from ..finding import Finding
 from ._json import blank, kind, load
 
@@ -45,6 +49,7 @@ CHECKS = (
     ("H6", "hooks-empty-command", "a command hook's command is not empty"),
     ("H7", "hooks-command-path", "a script a hook command runs from the project directory exists"),
     ("H8", "hooks-command-exec", "a script a hook command runs directly has execute permission"),
+    ("H9", "settings-misplaced-key", "a settings file has no top-level key that belongs somewhere else"),
 )
 SHARED = ("hooks", {"project_dir"})
 WHOLE_FILE = tuple(rule_id for rule_id, _, _ in CHECKS)   # JSON has no comments; no directive applies
@@ -67,13 +72,28 @@ REQUIRED = {
     "agent": ("prompt",),
 }
 GUARDING = frozenset({"PreToolUse", "PermissionRequest"})
+# H9 is about the top level of a settings file; another file of the family (one a repository adds
+# to `hooks_globs` for its hooks) has its own top level.
+SETTINGS_NAMES = frozenset({"settings.json", "settings.local.json"})
 
 
 def validate(shared: dict[str, Any], tables: dict[str, dict[str, Any]]) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
     check_keys(shared, {"project_dir"}, "shared.hooks")
     require_keys(shared, ["project_dir"], "shared.hooks")
     spellings = expect_str_list(shared["project_dir"], "shared.hooks.project_dir", allow_empty=True)
-    return {"project_dir": spellings}, levels_only(tables)
+    h9 = tables["H9"]
+    check_keys(h9, {"level", "keys", "ignore"}, "rules.H9")
+    require_keys(h9, ["keys", "ignore"], "rules.H9")
+    ignore = expect_str_list(h9["ignore"], "rules.H9.ignore", allow_empty=True)
+    if not isinstance(h9["keys"], dict):
+        raise ConfigError(f"rules.H9.keys must be a table of key = \"where it belongs\", got {type(h9['keys']).__name__}")
+    misplaced = {key: expect_str(place, f"rules.H9.keys.{key}") for key, place in h9["keys"].items()}
+    strangers = [key for key in ignore if key not in misplaced]
+    if strangers:
+        raise ConfigError(f"rules.H9.ignore names {', '.join(strangers)}, not in rules.H9.keys ({', '.join(sorted(misplaced))})")
+    effective = levels_only({rule_id: table for rule_id, table in tables.items() if rule_id != "H9"})
+    effective["H9"] = {"keys": misplaced, "ignore": ignore}
+    return {"project_dir": spellings, "misplaced": {k: v for k, v in misplaced.items() if k not in ignore}}, effective
 
 
 def _commands(data: Any) -> Iterator[tuple[str, str, list[str] | None]]:
@@ -299,13 +319,16 @@ def check(path: str, text: str, params: dict[str, Any], levels: dict[str, str]) 
     if not isinstance(data, dict):
         return [Finding(path, 0, "H1", f"the file is a JSON {kind(data)}, not an object; Claude Code does not "
                         "apply it")]
+    found: list[Finding] = [
+        Finding(path, 0, "H9", f"top-level key `{key}` is not a setting: Claude Code ignores it here without a warning; "
+                f"it belongs in {params['misplaced'][key]}")
+        for key in data if key in params["misplaced"] and posixpath.basename(path) in SETTINGS_NAMES]
     if "hooks" not in data:
-        return []
-    found: list[Finding] = []
+        return found
     hooks = data["hooks"]
     if not isinstance(hooks, dict):
-        return [Finding(path, 0, "H3", f"hooks is a JSON {kind(hooks)}, not an object mapping event names to "
-                        "matcher groups; Claude Code ignores every hook in this file")]
+        return found + [Finding(path, 0, "H3", f"hooks is a JSON {kind(hooks)}, not an object mapping event names to "
+                                "matcher groups; Claude Code ignores every hook in this file")]
     for event, groups in hooks.items():
         where = f"hooks.{event}"
         if event not in EVENTS:
