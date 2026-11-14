@@ -5,6 +5,16 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- A6 (`agent-tools`), at `warn`: an entry of a subagent file's `tools` names a tool Claude Code does
+  not recognise. Claude Code drops the entry without a warning and the subagent runs without that
+  tool; when no entry is left it refuses to start the subagent, which only the calling model sees
+  (measured with 2.1.325). The known names are `[rules.A6] tools`, from the tools reference, plus `extend_tools` for a
+  repository's own; `*` and
+  `mcp__` names are never reported. On 60 public repositories: 12 files in 5 repositories, mostly
+  tools of earlier versions such as `LS` and `MultiEdit` (docs/rules.md, "A1 to A6 subagent files").
+
 ### Fixed
 
 - H7 and H8 read a hook in exec form (one with `args`): `command` is the program as written and the

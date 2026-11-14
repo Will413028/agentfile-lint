@@ -1,4 +1,4 @@
-"""Subagent files (A1 to A5; docs/rules.md "A1 to A5 subagent files"), measured on Claude Code 2.1.323."""
+"""Subagent files (A1 to A6; docs/rules.md "A1 to A6 subagent files"), measured on Claude Code 2.1.323 (A6: 2.1.325)."""
 import json
 import unittest
 
@@ -120,6 +120,73 @@ class FamilyTest(unittest.TestCase):
         r = run_new(make_repo(files))
         self.assertEqual(r.returncode, 1)
         self.assertIn("disable", r.stdout)
+
+
+
+class ToolsTest(unittest.TestCase):
+    """A6: an entry of `tools` Claude Code does not recognise is dropped without a word; with no
+    entry left the subagent is refused (measured on 2.1.325)."""
+
+    HEAD = "name: reviewer\ndescription: Use to review.\n"
+
+    def found(self, tools: str, config: str = ""):
+        where, messages, _ = lint(agent(self.HEAD + tools), config)
+        return [(line, rule) for _, line, rule in where], messages
+
+    def test_forms_claude_code_resolves_report_nothing(self):
+        for tools in ("tools: Read, Grep, Glob, Bash\n", "tools: [Read, Bash]\n", "tools:\n  - Read\n  - Bash(git status)\n",
+                      "tools: Agent(worker, researcher), Read(./docs), Task\n", 'tools: "*"\n', "tools: mcp__github__*, mcp__x__y, Read\n",
+                      "tools:\n", "tools: null\n", "tools: ~\n", "tools: true\n", "tools: 5\n", "tools: Read Bash\n",
+                      'tools:\n  - "Read, Bash"\n', "tools: (x), Read\n", "tools: [Read, [Bash]]\n", "model: sonnet\n",
+                      "tools: [Agent(worker, LS, tester), Read]\n", "tools: Bash(git log, LS, x), Read\n",
+                      "tools:\n  - Read\n  - null\n  - true\n", "disallowedTools: LS, bash\n", "tools: ['Read', \"Bash\"]\n"):
+            with self.subTest(tools=tools):
+                self.assertEqual(self.found(tools)[0], [])
+
+    def test_unknown_names_are_reported_once_on_the_tools_line(self):
+        where, messages = self.found("tools: Read, LS, MultiEdit, LS, Bash\n")
+        self.assertEqual(where, [(4, "A6")])
+        self.assertIn("`tools` names `LS`, `MultiEdit`, which", messages[0])
+        self.assertIn("drops the entry without a warning", messages[0])
+        where, messages = self.found("model: opus\ntools:\n  - Read\n  - Context7(x)\n")
+        self.assertEqual(where, [(5, "A6")])
+        self.assertIn("`Context7`,", messages[0])
+
+    def test_no_entry_left_is_a_subagent_that_does_not_start(self):
+        for tools in ("tools: read, bash\n", "tools: [LS]\n", "tools:\n  - Context7\n"):
+            with self.subTest(tools=tools):
+                where, messages = self.found(tools)
+                self.assertEqual([rule for _, rule in where], ["A6"])
+                self.assertIn("refuses to start the subagent", messages[0])
+        # A subagent Claude Code does not load (A4) has no A6.
+        self.assertEqual(ids(agent("name: reviewer\ntools: LS\n")), ["A4"])
+        self.assertEqual(self.found('tools:\n  - "Read, LS"\n  - 5\n')[0], [(4, "A6")])
+        # An entry that resolves is left: `*`, a quoted name after the second parse, a specifier in a flow list.
+        self.assertIn("drops the entry", self.found('tools: "*, LS"\n')[1][0])
+        self.assertIn("drops the entry", self.found("tools: [Bash(git log, status, x), LS]\n")[1][0])
+        where, messages, _ = lint(agent("name: reviewer\ndescription: Use when asked. Examples: user: hello\ntools: [\"Read\", LS]\n"))
+        self.assertIn("drops the entry", messages[0])
+        # An MCP entry or `*` may resolve: the subagent starts.
+        self.assertIn("drops the entry", self.found("tools: LS, mcp__github__*\n")[1][0])
+
+    def test_a_flow_list_the_second_parse_turns_into_a_string_is_read(self):
+        head = "name: reviewer\ndescription: Use when asked. Examples: user: hello\n"
+        self.assertEqual(ids(agent(head + "tools: [Read, Grep, Glob]\n")), [])
+        self.assertEqual(ids(agent(head + "tools: [Read, LS]\n")), ["A6"])
+
+    def test_the_known_names_are_configuration(self):
+        self.assertEqual(self.found("tools: Read, MyTool\n", '[rules.A6]\ntools = ["Read", "MyTool"]\n')[0], [])
+        self.assertEqual(self.found("tools: Read, MyTool, Bash\n", '[rules.A6]\nextend_tools = ["MyTool"]\n')[0], [])
+        self.assertIn("`Mytool`,", self.found("tools: Read Mytool\n", '[rules.A6]\nextend_tools = ["MyTool"]\n')[1][0])
+        self.assertEqual(self.found("tools: Read, Bash\n", '[rules.A6]\ntools = ["Read"]\n')[0], [(4, "A6")])
+        self.assertEqual(self.found("tools: LS\n", '[rules.A6]\nlevel = "off"\n')[0], [])
+
+    def test_a_wrong_tools_setting_is_a_config_error(self):
+        files = dict(agent(self.HEAD))
+        files[".agentfile-lint.toml"] = '[rules.A6]\ntools = "Read"\n'
+        r = run_new(make_repo(files), "--format", "json")
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("rules.A6.tools", r.stderr)
 
 
 if __name__ == "__main__":

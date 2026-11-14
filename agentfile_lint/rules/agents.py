@@ -1,8 +1,8 @@
-"""A1 to A5: Claude Code subagent files (`.claude/agents/**/*.md`).
+"""A1 to A6: Claude Code subagent files (`.claude/agents/**/*.md`).
 
 A subagent file that Claude Code cannot read is not an error anywhere: the subagent is simply not in
-the list Claude chooses from. Each id is one way that happens (measured with Claude Code 2.1.323,
-docs/rules.md "A1 to A5 subagent files"):
+the list Claude chooses from. A1 to A5 are each one way that happens (measured with Claude Code 2.1.323,
+docs/rules.md "A1 to A6 subagent files"):
 
 - A1: the frontmatter does not parse, even after Claude Code's second attempt.
 - A2: the file has no frontmatter.
@@ -11,6 +11,10 @@ docs/rules.md "A1 to A5 subagent files"):
 - A4: `description` is missing or not a non-empty string.
 - A5: another subagent file in the same `agents` directory has the same `name`; only one is loaded.
 
+A6 is about a file that does load: `tools` names a tool Claude Code does not recognise (measured with
+2.1.325). The entry is dropped without a word and the subagent runs without that tool; when no entry
+is left, Claude Code refuses to start the subagent. The names it knows are data (`[rules.A6] tools`).
+
 Runs on the agents file family (`[discover] agents_globs`). The frontmatter is read as Claude Code
 reads it (`frontmatter.parse_as_claude_code`): a `description` with a colon in it is quoted on the second
 attempt and is fine. Upper case and spaces in `name` are fine too.
@@ -18,6 +22,7 @@ attempt and is fine. Upper case and spaces in `name` are fine too.
 from __future__ import annotations
 
 import posixpath
+import re
 from typing import Any
 
 from ..context import Context
@@ -34,6 +39,7 @@ CHECKS = (
     ("A3", "agent-name", "a subagent file has a name"),
     ("A4", "agent-description", "a subagent file has a description"),
     ("A5", "agent-duplicate-name", "no two subagent files in one agents directory have the same name"),
+    ("A6", "agent-tools", "every entry of a subagent file's `tools` names a tool Claude Code knows"),
 )
 WHOLE_FILE = ("A2",)   # the other ids are on frontmatter lines; A ids take no directive anyway
 
@@ -46,9 +52,61 @@ def validate(shared: Any, tables: dict[str, dict[str, Any]]) -> tuple[dict[str, 
     check_keys(a2, {"level", "ignore"}, "rules.A2")
     require_keys(a2, ["ignore"], "rules.A2")
     ignore = expect_str_list(a2["ignore"], "rules.A2.ignore", allow_empty=True)
-    effective = levels_only({rule_id: table for rule_id, table in tables.items() if rule_id != "A2"})
+    a6 = tables["A6"]
+    check_keys(a6, {"level", "tools", "extend_tools"}, "rules.A6")
+    require_keys(a6, ["tools", "extend_tools"], "rules.A6")
+    tools = expect_str_list(a6["tools"], "rules.A6.tools", allow_empty=True)
+    extend = expect_str_list(a6["extend_tools"], "rules.A6.extend_tools", allow_empty=True)
+    effective = levels_only({rule_id: table for rule_id, table in tables.items() if rule_id not in ("A2", "A6")})
     effective["A2"] = {"ignore": ignore}
-    return {"ignore": ignore}, effective
+    effective["A6"] = {"tools": tools, "extend_tools": extend}
+    return {"ignore": ignore, "tools": frozenset(tools) | frozenset(extend)}, effective
+
+
+def tool_entries(value: object, plain: object = False) -> list[str]:
+    """The entries of a `tools` value: a YAML list, or a string (in brackets or not, which is what
+    the second parse makes of a flow list). Entries are separated by commas or white space, in a
+    list item too; inside parentheses both belong to the entry (`Agent(worker, researcher)`).
+    `plain` is `Frontmatter.plain` for the key: a scalar that is not a string (`null`, `true`) is
+    no entry. A list is read as its items joined by commas, which also puts back together an
+    entry a flow list cut at the commas inside its parentheses."""
+    if isinstance(value, list):
+        flags = plain if isinstance(plain, list) and len(plain) == len(value) else [False] * len(value)
+        value, plain = ", ".join(item for item, flag in zip(value, flags) if isinstance(item, str) and is_string(item, flag)), False
+    if not isinstance(value, str) or not is_string(value, plain):
+        return []
+    text = value.strip()
+    if text.startswith("[") and text.endswith("]"):
+        text = text[1:-1]
+    out, depth, start = [], 0, 0
+    for i, c in enumerate(text + ","):
+        if c == "(":
+            depth += 1
+        elif c == ")" and depth:
+            depth -= 1
+        elif (c == "," or c.isspace()) and depth == 0:
+            out.append(text[start:i].strip("\"'"))
+            start = i + 1
+    return [entry for entry in out if entry]
+
+
+_TOOL_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_-]*\Z")
+
+
+def unknown_tools(value: object, known: frozenset[str], plain: object = False) -> tuple[list[str], bool]:
+    """(the tool names of a `tools` value that are not in `known`, whether another entry is left).
+    An entry's name is what stands before a `(`; `*` and MCP tools (`mcp__...`, which depend on
+    the servers of the session) are never unknown, and neither is an entry whose name is not a
+    word (`(x)`, `[Bash]`): how Claude Code reads those was not measured."""
+    unknown: list[str] = []
+    left = False
+    for entry in tool_entries(value, plain):
+        name = entry.split("(", 1)[0]
+        if name == "*" or name.startswith("mcp__") or name in known:
+            left = True
+        elif _TOOL_NAME.match(name) and name not in unknown:
+            unknown.append(name)
+    return unknown, left
 
 
 def agents_dir(path: str) -> str:
@@ -96,4 +154,12 @@ def check_repo(ctx: Context, params: dict[str, Any], levels: dict[str, str]) -> 
             if first != path:
                 found.append(Finding(path, fm.keys.get("name", 1), "A5", f"name {key[1]!r} is also the name of {first}; "
                                      "Claude Code loads only one of them"))
+            # A6 is for a subagent that loads.
+            unknown, left = unknown_tools(data.get("tools"), params["tools"], fm.plain.get("tools", False))
+            if unknown:
+                listed = ", ".join(f"`{name}`" for name in unknown)
+                found.append(Finding(path, fm.keys.get("tools", 1), "A6", f"`tools` names {listed}, which Claude Code does not "
+                                     "recognise as a tool (names are case-sensitive); " + (
+                                         "it drops the entry without a warning and the subagent runs without it" if left else
+                                         "no entry is left, so Claude Code refuses to start the subagent")))
     return found

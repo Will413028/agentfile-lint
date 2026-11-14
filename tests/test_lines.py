@@ -75,6 +75,8 @@ class ConfigJsonTest(unittest.TestCase):
                 self.assertEqual(doc["shared"].pop("hooks"), {"project_dir": ["$CLAUDE_PROJECT_DIR", "${CLAUDE_PROJECT_DIR}"]})
                 self.assertEqual(doc["rules"].pop("A2"), {"level": "warn", "ignore": ["**/README.md"]})
                 self.assertEqual([doc["rules"].pop(f"A{i}") for i in (1, 3, 4, 5)], [{"level": "warn"}] * 4)
+                a6 = doc["rules"].pop("A6")                                                 # after 0.10.0
+                self.assertEqual((a6["level"], len(a6["tools"]), "Bash" in a6["tools"], a6["extend_tools"]), ("warn", 49, True, []))
                 self.assertEqual([doc["rules"].pop(f"M{i}") for i in range(1, 5)], [{"level": "warn"}] * 4)
                 self.assertEqual(doc["rules"].pop("R1e")["level"], "warn")
                 # 0.10.0: rule files (P1 to P5) and the compaction estimate (S13, strict only).

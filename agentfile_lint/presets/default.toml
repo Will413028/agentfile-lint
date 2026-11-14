@@ -340,7 +340,7 @@ level = "warn"
 level = "warn"
 
 # ---------------------------------------------------------------------------------------------
-# A1 to A5: Claude Code subagent files (docs/rules.md, "A1 to A5 subagent files"). A file Claude Code
+# A1 to A6: Claude Code subagent files (docs/rules.md, "A1 to A6 subagent files"). A file Claude Code
 # cannot read as a subagent is not an error anywhere; the subagent is just not offered. A2 `ignore`:
 # globs of files in an agents directory that are not subagents.
 # ---------------------------------------------------------------------------------------------
@@ -359,6 +359,24 @@ level = "warn"
 
 [rules.A5]
 level = "warn"
+
+# A6 `tools`: the names a subagent's `tools` may hold. The tools reference of Claude Code
+# (code.claude.com/docs/en/tools-reference, read 2026-11-14), plus `Task` (the old name of `Agent`),
+# `DesignSync` and `ReadMcpResourceDirTool`, which 2.1.325 accepts. `*` and `mcp__` names are never
+# reported. A repository that uses a tool this list lacks names it in `extend_tools`.
+[rules.A6]
+level = "warn"
+extend_tools = []
+tools = [
+    "Agent", "Artifact", "AskUserQuestion", "Bash", "CronCreate", "CronDelete", "CronList", "DesignSync",
+    "Edit", "EndConversation", "EnterPlanMode", "EnterWorktree", "ExitPlanMode", "ExitWorktree", "Glob",
+    "Grep", "ListAgents", "ListMcpResourcesTool", "LSP", "Monitor", "NotebookEdit", "PowerShell",
+    "PushNotification", "Read", "ReadMcpResourceDirTool", "ReadMcpResourceTool", "RemoteTrigger",
+    "ReportFindings", "ScheduleWakeup", "SendFeedback", "SendMessage", "SendUserFile",
+    "ShareOnboardingGuide", "Skill", "SubagentHandback", "Task", "TaskCreate", "TaskGet", "TaskList",
+    "TaskOutput", "TaskStop", "TaskUpdate", "TodoWrite", "ToolSearch", "WaitForMcpServers", "WebFetch",
+    "WebSearch", "Workflow", "Write",
+]
 
 [rules.M1]
 level = "warn"

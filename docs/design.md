@@ -90,7 +90,7 @@ Each rule module checks one family of files, and each family has its own glob li
 |---|---|---|---|
 | instruction | `discover.globs`, `discover.extend_globs` | `AGENTS.md`, `CLAUDE.md`, `CLAUDE.local.md` at any depth, `.md` under `.claude/rules/` | R1a to R6, C1, P1 to P5 |
 | skill | `discover.skill_globs`, `discover.extend_skill_globs` | `**/SKILL.md` | S1 to S14 |
-| agents | `discover.agents_globs`, `discover.extend_agents_globs` | `.md` under `.claude/agents/` at any depth | A1 to A5 |
+| agents | `discover.agents_globs`, `discover.extend_agents_globs` | `.md` under `.claude/agents/` at any depth | A1 to A6 |
 | hooks | `discover.hooks_globs`, `discover.extend_hooks_globs` | `**/.claude/settings.json`, `**/.claude/settings.local.json` | H1 to H8 |
 | mcp | `discover.mcp_globs`, `discover.extend_mcp_globs` | `.mcp.json` (root only) | M1 to M4 |
 
@@ -291,7 +291,7 @@ the next line of the same file (docs/adr/0006).
 - It goes in the file that reports the finding: for R5a and R5b, the file with the repeated line, not
   the ancestor or sibling it repeats.
 - Rules whose findings are about the whole file (R1a, R1b, R1c, C1) or its frontmatter (P1 to P5)
-  and rules of other file families (S1 to S14, A1 to A5, H1 to H8, M1 to M4) are not accepted; use an allowlist entry or an override.
+  and rules of other file families (S1 to S14, A1 to A6, H1 to H8, M1 to M4) are not accepted; use an allowlist entry or an override.
 - The directive is ordinary text for the other rules: it counts toward R1a, R1b, R1c and R1d.
 - Directives run after overrides and before the allowlist, so a suppressed finding does not count
   toward an entry's `count`.

@@ -64,6 +64,7 @@ services/api/AGENTS.md:5: warning: R6: possible copied constant '`MAX_RETRIES = 
 | `S14` | warn | warn | a relative Markdown link in a `SKILL.md` body points to a tracked file or directory |
 | `P1`–`P5` | warn | warn | rule files in `.claude/rules/`: the frontmatter parses, `paths` is a glob or a list of globs, every pattern matches a tracked file, no look-alike key (`globs`) instead of `paths`, every list item is a string; each mistake silently loads the rule in every session or never |
 | `A1`–`A5` | warn | warn | subagent files in `.claude/agents/`: the frontmatter parses, the file has frontmatter, `name` and `description` are there, no two share a `name`; otherwise Claude Code silently does not load the subagent |
+| `A6` | warn | warn | every entry of a subagent's `tools` is a tool Claude Code knows; an unknown name is silently dropped, and a subagent with none left does not start |
 | `H7`, `H8` | warn | warn | a script a hook command names under `$CLAUDE_PROJECT_DIR` exists, and has execute permission when the command runs it directly |
 | `allowlist` | as the entry's rule | as the entry's rule | exceptions: expired, no-longer-needed or miscounted (`count` above or below the findings) allowlist entries fail when their rule is an `error` on that file and warn when it is `warn` or `off`; entries warn before they expire; an override glob that matches no file warns |
 | `disable` | error | error | per-line directives: a malformed one fails, one that suppresses nothing warns |
