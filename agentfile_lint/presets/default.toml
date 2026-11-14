@@ -328,7 +328,8 @@ level = "warn"
 
 # H7 and H8: the program a command hook names inside the project. `project_dir` lists the spellings
 # of the project directory a command may use; a repository whose hooks use another variable for the
-# same directory adds it, as written in the command.
+# same directory adds it, as written in the command. A hook with `args` (exec form) runs without a
+# shell: there only `${CLAUDE_PROJECT_DIR}` is read, whatever this list holds.
 [shared.hooks]
 project_dir = ["$CLAUDE_PROJECT_DIR", "${CLAUDE_PROJECT_DIR}"]
 

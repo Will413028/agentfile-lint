@@ -502,7 +502,7 @@ rules run on these files.
 | H4 | a handler has no `type`, or one other than `command`, `http`, `mcp_tool`, `prompt`, `agent` | hooks reference, "Common fields": `type` required | ignores the handler |
 | H5 | a handler lacks a field its type marks required, or has it as a non-string: `command` (command), `url` (http), `server` and `tool` (mcp_tool), `prompt` (prompt, agent) | hooks reference, "Hook handler fields" tables | ignores the handler |
 | H6 | a command hook's `command` is empty or blank | hooks reference, `command`: "Shell command to execute" | loads it without a warning; it runs no program |
-| H7 | a command runs a script under the project directory (after `$CLAUDE_PROJECT_DIR` or another spelling in `[shared.hooks] project_dir`) that is neither tracked nor on disk | hooks reference, "Reference scripts by path"; "when the script path doesn't exist or isn't executable, the shell exits with a code like 127 [...] a hook that can't start is a non-blocking error" | the hook does not run and the action goes ahead (measured by running a headless session on 2.1.323, which printed nothing about it) |
+| H7 | a command runs a script under the project directory (after `$CLAUDE_PROJECT_DIR` or another spelling in `[shared.hooks] project_dir`; in exec form only after `${CLAUDE_PROJECT_DIR}`) that is neither tracked nor on disk | hooks reference, "Reference scripts by path"; "when the script path doesn't exist or isn't executable, the shell exits with a code like 127 [...] a hook that can't start is a non-blocking error" | the hook does not run and the action goes ahead (measured by running a headless session on 2.1.323, which printed nothing about it) |
 | H8 | such a script is the program of one of the command's simple commands, so it is run directly, and the file has no execute permission | the same sentences | the same (measured the same way); through an interpreter (`bash "$CLAUDE_PROJECT_DIR"/x.sh`) it runs |
 
 Under `PreToolUse` and `PermissionRequest`, an H3 to H5 failure is wider: `claude doctor` says such a
@@ -522,7 +522,9 @@ Readings:
   `env`), or the first word that is not a flag after `bash`, `sh`, `zsh`, `dash`, `ksh`, `python`,
   `python3`, `node`, `bun`, `deno`, `ruby`, `perl`, `pwsh`, `source` or `.`, unless a flag before it
   makes the argument code or a module (a short flag holding `c`, `e`, `m` or `p` such as `-c`, `-lc`
-  or `-pe`, `--eval`, `--print`, `-Command`, a bare `-`). The text of a here-document is not read. Arguments of other programs, redirection targets and files the command
+  or `-pe`, `--eval`, `--print`, `-Command`, a bare `-`; after a shell only a flag holding `c` or `s`, so
+  `bash -e script` is read). A program that is itself a script under the project directory and
+  named like an interpreter (`"$CLAUDE_PROJECT_DIR"/.venv/bin/python`) is read both ways. The text of a here-document is not read. Arguments of other programs, redirection targets and files the command
   creates are not judged, and neither is a script the same command tests first
   (`[ -x "$CLAUDE_PROJECT_DIR"/opt.sh ] && "$CLAUDE_PROJECT_DIR"/opt.sh`). H8 is for the program
   position only. The script's word must be a project-directory spelling, then `/`, then the path:
@@ -537,6 +539,17 @@ Readings:
   replaces the default two. A file that exists on disk but is not tracked counts as there: a script a
   setup step generates is reported only where it has not been generated, such as a fresh clone in CI.
   H8 looks at the file on disk and is skipped on Windows, which has no execute permission.
+- Exec form: a hook with an `args` list runs without a shell (hooks reference, "Exec form and shell
+  form"; measured on 2.1.325). `command` is then the program exactly as written, not split into
+  words, and each element of `args` is one argument, so H7 and H8 read the whole `command` as the
+  program and, after an interpreter, the first element of `args` that is not a flag; the finding
+  names the element (`hooks.Stop.0.hooks.1.args.0`). A wrapper program (`env`, `nohup`, `time`,
+  by name or path) is followed into `args`; words only a shell understands (`exec`, `source`,
+  `if`) are not programs there. Only
+  `${CLAUDE_PROJECT_DIR}` is substituted there: `$CLAUDE_PROJECT_DIR` without braces and the
+  spellings of `[shared.hooks] project_dir` stay literal text and name no script. An empty `args`
+  list is still exec form. A hook whose `args` is not a list of strings (`null`, a string, a
+  list holding a number) is not read: Claude Code ignores the hook ("Invalid command hook", measured).
 - Not checked: the types of optional fields (`timeout`, `async`, `args`, `if` and the rest; Claude Code
   drops a handler whose optional field has the wrong type, but following every optional field is a
   key table that changes with each Claude Code release), whether an http hook's `url` is a URL Claude

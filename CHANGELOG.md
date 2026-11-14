@@ -5,6 +5,20 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- H7 and H8 read a hook in exec form (one with `args`): `command` is the program as written and the
+  script handed to an interpreter is looked for in `args`, as Claude Code runs it without a shell
+  (measured with 2.1.325). Before, the script in `args` was not checked, and a `command` holding a
+  space was split into words as a shell would. A finding on a script in `args` names the element
+  (`hooks.Stop.0.hooks.1.args.0`). Findings that go away: in exec form only `${CLAUDE_PROJECT_DIR}`
+  names the project directory, so `$CLAUDE_PROJECT_DIR` without braces and the spellings of
+  `[shared.hooks] project_dir` are no longer read there (Claude Code does not substitute them), and
+  a hook whose `args` is not a list of strings is skipped (Claude Code ignores it).
+- H7 reads the script after a shell flag that is not `-c` (`bash -e script`), and the script handed
+  to an interpreter that is itself a file under the project directory
+  (`"$CLAUDE_PROJECT_DIR"/.venv/bin/python script.py`); both were skipped (docs/rules.md, "H1 to H8 hooks").
+
 ## [0.10.0] - 2026-11-14
 
 ### Added

@@ -18,7 +18,9 @@ not run. Claude Code treats that as a non-blocking error, so the action the hook
 goes ahead. A script counts when its word is one of `[shared.hooks] project_dir` (spellings of the
 project directory, `$CLAUDE_PROJECT_DIR` by default) where the shell expands it, then a path without
 an expansion of its own. Other paths in a command (arguments, redirection targets, files it creates)
-are not judged.
+are not judged. A hook with `args` runs without a shell (exec form, measured on 2.1.325): `command`
+is the program as written, the script may be an element of `args`, and only `${CLAUDE_PROJECT_DIR}`
+names the project directory.
 """
 from __future__ import annotations
 
@@ -74,8 +76,9 @@ def validate(shared: dict[str, Any], tables: dict[str, dict[str, Any]]) -> tuple
     return {"project_dir": spellings}, levels_only(tables)
 
 
-def _commands(data: Any) -> Iterator[tuple[str, str]]:
-    """(JSON path, command) of every command hook that H1 to H6 accept as one."""
+def _commands(data: Any) -> Iterator[tuple[str, str, list[str] | None]]:
+    """(JSON path, command, args) of every command hook that H1 to H6 accept as one. `args` is None
+    in shell form (no `args` key); a hook whose `args` is not a list of strings is left out."""
     hooks = data.get("hooks") if isinstance(data, dict) else None
     for event, groups in hooks.items() if isinstance(hooks, dict) else ():
         for i, group in enumerate(groups if event in EVENTS and isinstance(groups, list) else ()):
@@ -84,7 +87,10 @@ def _commands(data: Any) -> Iterator[tuple[str, str]]:
             handlers = group.get("hooks")
             for j, handler in enumerate(handlers if isinstance(handlers, list) else ()):
                 if isinstance(handler, dict) and handler.get("type") == "command" and isinstance(handler.get("command"), str):
-                    yield f"hooks.{event}.{i}.hooks.{j}", handler["command"]
+                    args = handler.get("args")
+                    if "args" in handler and not (isinstance(args, list) and all(isinstance(a, str) for a in args)):
+                        continue
+                    yield f"hooks.{event}.{i}.hooks.{j}", handler["command"], args
 
 
 # Programs that run the script given as their first argument, and words that only wrap a command.
@@ -174,34 +180,83 @@ def _project_path(word: tuple[str, str], spellings: list[str]) -> str | None:
     return None
 
 
-def project_scripts(command: str, spellings: list[str]) -> list[tuple[str, bool]]:
-    """(path under the project directory, whether it is run directly) of each script the command
-    runs: the program of a simple command, or the script an interpreter is given. A path the same
-    command tests first (`[ -x path ] && path`) is optional by design and left out."""
-    found: list[tuple[str, bool]] = []
+# Shells: only `c` (code) or `s` (script on stdin) in a flag cluster means the next word is not a
+# script (`bash -e script` runs the script).
+_SHELLS = frozenset("bash sh zsh dash ksh".split())
+_SHELL_INLINE = re.compile(r"-[A-Za-z]*[cs][A-Za-z]*\Z|-\Z")
+# Words only a shell understands: without one (exec form) they are not programs.
+_SHELL_ONLY = frozenset("exec command if then elif else while until do ! { source .".split())
+# Exec form: the one spelling of the project directory Claude Code substitutes without a shell.
+_PLACEHOLDER = "${CLAUDE_PROJECT_DIR}"
+
+
+def _scripts(words: list[tuple[str, str]], spellings: list[str], shell: bool) -> tuple[list[tuple[str, bool, int]], list[str]]:
+    """((path under the project directory, whether it is run directly, index of its word) of each
+    script one simple command runs, the paths it only tests). The program may be a script and an
+    interpreter at once (`"$CLAUDE_PROJECT_DIR"/.venv/bin/python x.py`). Without a shell (exec
+    form) an assignment counts only after a wrapper such as `env`, and a shell-only word is not a program."""
+    start = 0
+    while start < len(words):
+        text, marks = words[start]
+        if _ASSIGNMENT.match(text) and (marks[0] == "u" if shell else start):
+            pass
+        elif text not in _WRAPPERS or not shell and text in _SHELL_ONLY:
+            break
+        start += 1
+    if start == len(words):
+        return [], []
+    program = words[start][0]
+    if program in _TESTS:
+        return [], [p for p in (_project_path(w, spellings) for w in words[start + 1:]) if p]
+    found: list[tuple[str, bool, int]] = []
+    path = _project_path(words[start], spellings)
+    if path:
+        found.append((path, True, start))
+    name = posixpath.basename(program)
+    if name in _INTERPRETERS and (shell or name not in _SHELL_ONLY):
+        inline = _SHELL_INLINE if name in _SHELLS else _INLINE
+        for i in range(start + 1, len(words)):
+            if inline.match(words[i][0]):
+                break
+            if not words[i][0].startswith("-"):
+                path = _project_path(words[i], spellings)
+                if path:
+                    found.append((path, False, i))
+                break
+    return found, []
+
+
+def project_scripts(command: str, spellings: list[str]) -> list[tuple[str, bool, str]]:
+    """(path under the project directory, whether it is run directly, the handler key that names
+    it) of each script a shell-form command runs: the program of a simple command, or the script
+    an interpreter is given. A path the same command tests first (`[ -x path ] && path`) is
+    optional by design and left out."""
+    found: list[tuple[str, bool, str]] = []
     tested: set[str] = set()
     for words in simple_commands(command):
-        while words and (_ASSIGNMENT.match(words[0][0]) and words[0][1][0] == "u" or words[0][0] in _WRAPPERS):
-            words = words[1:]
-        if not words:
-            continue
-        program = words[0][0]
-        if program in _TESTS:
-            tested.update(p for p in (_project_path(w, spellings) for w in words[1:]) if p)
-            continue
-        path = _project_path(words[0], spellings)
-        if path:
-            found.append((path, True))
-        elif posixpath.basename(program) in _INTERPRETERS:
-            for word in words[1:]:
-                if _INLINE.match(word[0]):
-                    break
-                if not word[0].startswith("-"):
-                    path = _project_path(word, spellings)
-                    if path:
-                        found.append((path, False))
-                    break
+        scripts, tests = _scripts(words, spellings, shell=True)
+        found.extend((path, direct, "command") for path, direct, _ in scripts)
+        tested.update(tests)
     return [entry for entry in dict.fromkeys(found) if entry[0] not in tested]
+
+
+def exec_scripts(command: str, args: list[str]) -> list[tuple[str, bool, str]]:
+    """`project_scripts` for exec form (a hook with `args`): no shell reads the hook, so `command`
+    is the program as written, each element of `args` is one argument, and only
+    `${CLAUDE_PROJECT_DIR}` names the project directory. A wrapper program (`env`, `nohup`,
+    `time`, by name or by path) is followed into `args`."""
+    def word(text: str) -> tuple[str, str]:
+        # Marks as `simple_commands` gives them: the placeholder is expanded, the rest is literal.
+        # A second placeholder is marked expanded too, which makes the word no path (`_project_path`).
+        known = len(_PLACEHOLDER) if text.startswith(_PLACEHOLDER) else 0
+        rest = text[known:]
+        return text, "u" * known + ("u" if _PLACEHOLDER in rest else "s") * len(rest)
+
+    # `/usr/bin/env` is the wrapper; a file of that name under the project directory is a script.
+    name = posixpath.basename(command)
+    words = [word(name if name in _WRAPPERS and not command.startswith(_PLACEHOLDER) else command)] + [word(arg) for arg in args]
+    scripts, _ = _scripts(words, [_PLACEHOLDER], shell=False)
+    return [(path, direct, f"args.{i - 1}" if i else "command") for path, direct, i in scripts]
 
 
 def check_repo(ctx: Context, params: dict[str, Any], levels: dict[str, str]) -> list[Finding]:
@@ -215,17 +270,18 @@ def check_repo(ctx: Context, params: dict[str, Any], levels: dict[str, str]) -> 
         # The project directory: the one that holds the `.claude` folder of the settings file.
         folder = posixpath.dirname(path)
         base = posixpath.dirname(folder) if posixpath.basename(folder) == ".claude" else folder
-        for where, command in _commands(data):
-            for relative, direct in project_scripts(command, params["project_dir"]):
+        for where, command, args in _commands(data):
+            scripts = project_scripts(command, params["project_dir"]) if args is None else exec_scripts(command, args)
+            for relative, direct, key in scripts:
                 target = posixpath.normpath(posixpath.join(base, relative))
                 if target == ".." or target.startswith("../"):
                     continue
                 on_disk = ctx.root / target
                 if target not in ctx.tracked_set and target not in ctx.dirs and not on_disk.exists():
-                    found.append(Finding(path, 0, "H7", f"{where}.command runs {relative}, which is not a tracked "
+                    found.append(Finding(path, 0, "H7", f"{where}.{key} runs {relative}, which is not a tracked "
                                          f"file (looked for {target}); the hook cannot start, which is a non-blocking error: the action goes ahead without it"))
                 elif direct and os.name != "nt" and on_disk.is_file() and not os.access(on_disk, os.X_OK):
-                    found.append(Finding(path, 0, "H8", f"{where}.command runs {relative} directly, and the file has no "
+                    found.append(Finding(path, 0, "H8", f"{where}.{key} runs {relative} directly, and the file has no "
                                          "execute permission; the hook cannot start, which is a non-blocking error: the action goes "
                                          "ahead without it (chmod +x the file, or run it through its interpreter)"))
     return found
