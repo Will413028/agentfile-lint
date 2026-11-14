@@ -5,6 +5,41 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-14
+
+### Added
+
+- A6 (`agent-tools`), at `warn`: an entry of a subagent file's `tools` names a tool Claude Code does
+  not recognise. Claude Code drops the entry without a warning and the subagent runs without that
+  tool; when no entry is left it refuses to start the subagent, which only the calling model sees
+  (measured with 2.1.325). The known names are `[shared.agents] tools`, from the tools reference, plus `extend_tools` for a
+  repository's own; `*` and
+  `mcp__` names are never reported. On 60 public repositories: 12 files in 5 repositories, mostly
+  tools of earlier versions such as `LS` and `MultiEdit` (docs/rules.md, "A1 to A7 subagent files").
+- A7 (`agent-disallowed-tools`), at `warn`: the same check on `disallowedTools`, with A6's names. An
+  unknown name there denies nothing, so `disallowedTools: bash` leaves the subagent Bash (measured
+  with 2.1.325).
+- H9 (`settings-misplaced-key`), at `warn`: a top-level key of `settings.json` or
+  `settings.local.json` that works only in another place: `defaultMode` and `deny` (keys of
+  `permissions`), `disallowedTools` (a command-line flag) and `mcpServers` (read from `.mcp.json`).
+  Claude Code ignores the key without a warning (measured with 2.1.325; docs/rules.md, "H1 to H9
+  hooks"). The keys are `[rules.H9.keys]`, a table a repository adds to; `[rules.H9] ignore` drops
+  shipped ones. On 60 public repositories: 3 findings in 3 repositories.
+
+### Fixed
+
+- H7 and H8 read a hook in exec form (one with `args`): `command` is the program as written and the
+  script handed to an interpreter is looked for in `args`, as Claude Code runs it without a shell
+  (measured with 2.1.325). Before, the script in `args` was not checked, and a `command` holding a
+  space was split into words as a shell would. A finding on a script in `args` names the element
+  (`hooks.Stop.0.hooks.1.args.0`). Findings that go away: in exec form only `${CLAUDE_PROJECT_DIR}`
+  names the project directory, so `$CLAUDE_PROJECT_DIR` without braces and the spellings of
+  `[shared.hooks] project_dir` are no longer read there (Claude Code does not substitute them), and
+  a hook whose `args` is not a list of strings is skipped (Claude Code ignores it).
+- H7 reads the script after a shell flag that is not `-c` (`bash -e script`), and the script handed
+  to an interpreter that is itself a file under the project directory
+  (`"$CLAUDE_PROJECT_DIR"/.venv/bin/python script.py`); both were skipped (docs/rules.md, "H1 to H9 hooks").
+
 ## [0.10.0] - 2026-11-14
 
 ### Added
